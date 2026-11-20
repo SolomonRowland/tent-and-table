@@ -4,8 +4,8 @@
    - DemoDB keeps sample data in this browser, for trying the app.
    The app keeps a copy of every table in memory (S.db) and calls DB.save /
    DB.remove for each change. */
-var CLOUD_URL = 'https://mbzabezkhptjjbyzkxbw.supabase.co';
-var CLOUD_KEY = 'sb_publishable_0uqPd7iYgo98ld-CaF5M6g_AV3VAlEI';
+var CLOUD_URL = 'https://vvfdhhbcvpgggfcusvqa.supabase.co';
+var CLOUD_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2ZmRoaGJjdnBnZ2dmY3VzdnFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODk2ODMsImV4cCI6MjExMDc2NTY4M30.0mAyAPU_QSDcOd6Qa9c2kOvlmU89vtL30_kCuu2E77s';
 
 var DIR_TABLES = ['ed_people', 'ed_vendors', 'ed_contacts', 'ed_equipment', 'ed_budget'];
 var EVENT_TABLES = ['ed_event_people', 'ed_event_vendors', 'ed_event_contacts', 'ed_event_equipment', 'ed_schedule', 'ed_tasks',
