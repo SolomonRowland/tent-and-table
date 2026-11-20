@@ -1,4 +1,4 @@
--- Tent & Table database (version 14).
+-- Tent & Table database (version 15).
 -- Paste this whole file into Supabase: SQL Editor -> New query -> Run.
 -- It is safe to run more than once. Every table starts with "ed_", so it can
 -- share a Supabase project with Tend Home without touching Tend's data.
@@ -312,6 +312,8 @@ create table if not exists public.ed_signups (
 );
 create index if not exists ed_signups_event_idx on public.ed_signups (event_id);
 create index if not exists ed_signups_item_idx on public.ed_signups (item_id);
+-- version 15: sign in with a text code (Supabase phone auth); a member's login phone is saved on joining
+
 -- version 14: background checks (a cleared date and optional expiry on each person; a flag on shifts that need one)
 alter table public.ed_people add column if not exists bg_cleared_on date;
 alter table public.ed_people add column if not exists bg_expires_on date;
@@ -518,6 +520,12 @@ do $$ declare t text; begin
 end $$;
 
 -- ============================================================ account functions
+-- The phone number a text-code login signed in with ('' for email logins), as +15555550123.
+create or replace function public.ed_login_phone() returns text
+language sql stable set search_path = public as $$
+  select case when coalesce(auth.jwt() ->> 'phone', '') = '' then '' else '+' || regexp_replace(auth.jwt() ->> 'phone', '[^0-9]', '', 'g') end
+$$;
+
 create or replace function public.ed_create_org(p_name text, p_display text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare oid uuid;
@@ -526,8 +534,8 @@ begin
   select org_id into oid from public.ed_members where user_id = auth.uid();
   if oid is not null then return oid; end if;
   insert into public.ed_orgs (name, created_by) values (coalesce(nullif(ed_clip(p_name, 120), ''), 'Our Ministry'), auth.uid()) returning id into oid;
-  insert into public.ed_members (org_id, user_id, email, name, role)
-    values (oid, auth.uid(), auth.jwt() ->> 'email', nullif(ed_clip(p_display, 80), ''), 'owner');
+  insert into public.ed_members (org_id, user_id, email, name, role, phone)
+    values (oid, auth.uid(), nullif(auth.jwt() ->> 'email', ''), nullif(ed_clip(p_display, 80), ''), 'owner', public.ed_login_phone());
   return oid;
 end $$;
 
@@ -554,8 +562,8 @@ begin
     raise exception 'This login already belongs to another ministry. Sign up with a different email to join this one.';
   end if;
   if (select count(*) from public.ed_members where org_id = inv.org_id) >= 10 then raise exception 'This account already has 10 people'; end if;
-  insert into public.ed_members (org_id, user_id, email, name, role)
-    values (inv.org_id, auth.uid(), auth.jwt() ->> 'email', nullif(ed_clip(p_display, 80), ''), 'member')
+  insert into public.ed_members (org_id, user_id, email, name, role, phone)
+    values (inv.org_id, auth.uid(), nullif(auth.jwt() ->> 'email', ''), nullif(ed_clip(p_display, 80), ''), 'member', public.ed_login_phone())
     on conflict (org_id, user_id) do nothing;
   delete from public.ed_invites where code = inv.code;
   return inv.org_id;

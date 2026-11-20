@@ -40,11 +40,13 @@ export function plan(d, now, sent) {
   const memberOf = (c) => c && members.find((m) => (m.email && c.email && low(m.email) === low(c.email)) || (m.phone && c.phone && digits(m.phone) === digits(c.phone)) || (m.name && low(m.name) === low(c.name)));
   const named = (m, text) => { const n = low(m.name); return n && String(text || '').split(/,\s*|\s+and\s+|\s*&\s*|\s*\/\s*/).some((x) => low(x) === n); };
   // A member's notice goes by their chosen channel(s), as long as they have that address.
+  // Chosen channel(s); a login with only a phone (text-code sign-in) gets texts, and only-email gets email.
+  const chOf = (m) => { const want = m.p.channel === 'both' ? ['email', 'text'] : [m.p.channel === 'text' ? 'text' : 'email']; return [...new Set(want.map((c) => (c === 'email' && !m.email && m.phone ? 'text' : c === 'text' && !m.phone && m.email ? 'email' : c)))]; };
   const toMember = (m, kind, key, subject, text, rows) => {
-    const ch = m.p.channel === 'both' ? ['email', 'text'] : [m.p.channel === 'text' ? 'text' : 'email'];
+    const ch = chOf(m);
     ch.forEach((c) => { if (c === 'email' ? m.email : m.phone) out.push({ key: key + ':' + c, rows: (rows || []).map((r) => r + ':' + c), kind, to: { name: m.name || m.email, email: m.email, phone: m.phone }, channel: c, subject, text }); });
   };
-  const fresh = (rows, pre, m) => rows.filter((r) => { const ch = m.p.channel === 'both' ? ['email', 'text'] : [m.p.channel === 'text' ? 'text' : 'email']; return ch.some((c) => !sent.has(pre + m.user_id + ':' + r.id + ':' + c)); });
+  const fresh = (rows, pre, m) => rows.filter((r) => { const ch = chOf(m); return ch.some((c) => !sent.has(pre + m.user_id + ':' + r.id + ':' + c)); });
   const link = d.appUrl ? '\n\n' + d.appUrl : '';
   const recent = (r) => r.created_at && now - new Date(r.created_at) < 2 * 864e5; // never notify about old rows on a first run
 

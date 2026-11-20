@@ -559,16 +559,38 @@ var F_ASSIGN = {
 /* ================================================================ auth + setup */
 function viewAuth() {
   var up = S.authMode === 'up', reset = S.authMode === 'reset';
-  return '<div class="auth"><div class="logo">' + IC.tent + '</div><h1>Tent &amp; Table</h1>' +
-    '<p class="lead">Plan every event your ministry runs, from the annual tent revival to a monthly board meeting: people, speakers, worship, vendors, equipment, food, money and follow-up.</p>' +
+  var intro = '<div class="auth"><div class="logo">' + IC.tent + '</div><h1>Tent &amp; Table</h1>' +
+    '<p class="lead">Plan every event your ministry runs, from the annual tent revival to a monthly board meeting: people, speakers, worship, vendors, equipment, food, money and follow-up.</p>';
+  var demo = '<div class="card" style="margin-top:24px"><b>Just Looking?</b><p class="small muted" style="margin:4px 0 10px">Open a demo ministry with sample events. Nothing you change there is saved to an account.</p><button class="btn ghost sm" data-a="try-demo">Try The Demo</button></div></div>';
+  // Default: sign in (or create an account) with a code texted to your phone. No password to remember.
+  if (S.authVia !== 'email') {
+    var sent = S.otpPhone;
+    return intro + '<form data-form="auth-phone" class="fgrid">' +
+      (sent ? '<div class="fld"><p class="small" style="margin:0">We texted a 6-digit code to <b>' + esc(prettyPhone(S.otpPhone)) + '</b>.</p></div><div class="fld"><label for="a_code">Code</label><input class="inp otp" id="a_code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="8" required autofocus></div>'
+        : '<div class="fld"><label for="a_phone">Your Mobile Number</label><input class="inp" id="a_phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(555) 555-0123" required autofocus></div>') +
+      '<div class="fld"><button class="btn block" type="submit"' + (S.busy ? ' disabled' : '') + '>' + (sent ? 'Sign In' : 'Text Me A Code') + '</button></div></form>' +
+      (sent ? '<p class="small muted"><a href="#" data-a="otp-resend">Send it again</a> · <a href="#" data-a="otp-change">Use a different number</a></p>' : '<p class="small muted">New or returning, it’s the same: we text you a code and you’re in. Message and data rates may apply.</p>') +
+      (S.authMsg ? '<div class="err">' + esc(S.authMsg) + '</div>' : '') +
+      '<p class="small muted" style="margin-top:16px"><a href="#" data-a="auth-via" data-v="email">Use email and a password instead</a></p>' + demo;
+  }
+  return intro +
     '<form data-form="auth" class="fgrid">' +
     '<div class="fld"><label for="a_email">Email</label><input class="inp" id="a_email" name="email" type="email" autocomplete="email" required></div>' +
     (reset ? '' : '<div class="fld"><label for="a_pw">Password</label><input class="inp" id="a_pw" name="pw" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" minlength="8" required></div>') +
     '<div class="fld"><button class="btn block" type="submit"' + (S.busy ? ' disabled' : '') + '>' + (reset ? 'Send Reset Link' : up ? 'Create Account' : 'Sign In') + '</button></div></form>' +
     (up ? '<p class="small muted">Each login belongs to one ministry. If you serve with two ministries, use a different email for each.</p>' : '') +
     (S.authMsg ? '<div class="err">' + esc(S.authMsg) + '</div>' : '') +
-    '<p class="small muted" style="margin-top:16px">' + (up ? 'Already have an account? <a href="#" data-a="auth-mode" data-v="in">Sign In</a>' : 'New here? <a href="#" data-a="auth-mode" data-v="up">Create An Account</a> · <a href="#" data-a="auth-mode" data-v="reset">Forgot Password</a>') + '</p>' +
+    '<p class="small muted" style="margin-top:16px">' + (up ? 'Already have an account? <a href="#" data-a="auth-mode" data-v="in">Sign In</a>' : 'New here? <a href="#" data-a="auth-mode" data-v="up">Create An Account</a> · <a href="#" data-a="auth-mode" data-v="reset">Forgot Password</a>') + '</p>' + '<p class="small muted"><a href="#" data-a="auth-via" data-v="phone">Sign in with a text code instead</a></p>' +
     '<div class="card" style="margin-top:24px"><b>Just Looking?</b><p class="small muted" style="margin:4px 0 10px">Open a demo ministry with sample events. Nothing you change there is saved to an account.</p><button class="btn ghost sm" data-a="try-demo">Try The Demo</button></div></div>';
+}
+function e164(p) { var s = String(p || '').trim(), d = s.replace(/[^0-9]/g, ''); if (s.charAt(0) === '+' && d.length >= 8) return '+' + d; if (d.length === 10) return '+1' + d; if (d.length === 11 && d.charAt(0) === '1') return '+' + d; return ''; }
+function prettyPhone(p) { var d = digits(p); if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1); return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : String(p || ''); }
+function otpErr(e) {
+  var m = String((e && e.message) || e || '');
+  if (/provider|phone.*(disabled|not enabled)|sms.*(disabled|not)/i.test(m)) return 'Text sign-in isn’t turned on for this app yet. Use email for now.';
+  if (/expired|invalid|token/i.test(m)) return 'That code didn’t work or has expired. Tap “Send it again” for a new one.';
+  if (/rate|seconds|too many/i.test(m)) return 'Please wait a minute before asking for another code.';
+  return errMsg(e);
 }
 function viewSetup() {
   return head('Tent & Table', '', '', '<button class="link" data-a="signout">Sign Out</button>') + '<main>' +
@@ -1050,8 +1072,8 @@ function viewSettings() {
     (owner ? '' : '<p class="small muted">Only the account owner can change the ministry profile.</p>');
   h += secHead('My Profile', '<button class="link" data-a="edit-me">Edit</button>') +
     '<div class="card"><div class="sheethead">' + avatar(me.name || S.user.email) + '<div><h3>' + esc(me.name || 'Add Your Name') + '</h3><p class="lead">' + (owner ? 'Account Owner' : 'Member') + '</p></div></div>' +
-    kv([['Phone', me.phone], ['Login Email', S.user.email || me.email]]) +
-    '<div class="btnrow"><button class="btn sm ghost" data-a="change-email">Change Login Email</button><button class="btn sm ghost" data-a="change-pw">Change Password</button></div></div>';
+    kv(S.user.phone && !S.user.email ? [['Phone', me.phone || prettyPhone(S.user.phone)], ['Signs In With', 'A text code to ' + prettyPhone(S.user.phone)]] : [['Phone', me.phone], ['Login Email', S.user.email || me.email]]) +
+    (S.user.phone && !S.user.email ? '<p class="small muted">To change your sign-in number, sign out and sign in with the new number, then ask the account owner to invite it.</p>' : '<div class="btnrow"><button class="btn sm ghost" data-a="change-email">Change Login Email</button><button class="btn sm ghost" data-a="change-pw">Change Password</button></div>') + '</div>';
   var live = notifyLive(), chs = notifyChannels(), chLbl = chs.map(function (c) { return c === 'text' ? 'texts' : 'emails'; }).join(' and ');
   h += secHead('Notifications') + '<div class="card">' + (live
     ? '<div class="nstat on">' + IC.check + '<span><b>Automatic ' + esc(chLbl || 'notices') + ' are on.</b> They go out as things happen and each morning at 7.</span></div>' + '<div class="btnrow"><button class="btn sm ghost" data-a="notify-test">Send Me A Test</button></div>'
@@ -2248,6 +2270,9 @@ var A = {
   'sheet-save': function () { if (S.sheet && S.sheet.save) { var p = S.sheet.save(); if (p && p.catch) p.catch(function () {}); } },
   'sheet-del': function () { if (S.sheet && S.sheet.del) S.sheet.del(); },
   nav: function (t) { S.tab = t.getAttribute('data-v'); if (S.ev) { closeEvent(); return; } render(); window.scrollTo(0, 0); },
+  'auth-via': function (t) { S.authVia = t.getAttribute('data-v'); S.authMsg = ''; S.otpPhone = ''; render(); },
+  'otp-change': function () { S.otpPhone = ''; S.authMsg = ''; render(); },
+  'otp-resend': function () { var ph = S.otpPhone; S.authMsg = ''; DB.sendCode(ph).then(function () { toast('Code sent again'); }, function (e) { S.authMsg = otpErr(e); render(); }); },
   'auth-mode': function (t) { S.authMode = t.getAttribute('data-v'); S.authMsg = ''; render(); },
   'try-demo': function () { lset('ed.mode', 'demo'); location.reload(); },
   'leave-demo': function () { lset('ed.mode', null); location.href = location.pathname; },
@@ -2416,6 +2441,17 @@ document.addEventListener('submit', function (ev) {
     var p = S.authMode === 'reset' ? DB.resetPassword(v.email).then(function () { S.authMsg = 'Check your email for a reset link.'; S.authMode = 'in'; })
       : (S.authMode === 'up' ? DB.signUp(v.email, v.pw) : DB.signIn(v.email, v.pw)).then(function (u) { if (!u) { S.authMsg = 'Check your email to confirm your account, then sign in.'; S.authMode = 'in'; return; } S.user = u; S.loading = true; return loadAcct(); });
     p.catch(function (e) { S.authMsg = errMsg(e); }).then(function () { S.busy = false; render(); });
+  } else if (k === 'auth-phone') {
+    S.authMsg = '';
+    if (!S.otpPhone) {
+      var ph = e164(v.phone); if (!ph) { S.authMsg = 'Enter a 10-digit mobile number.'; render(); return; }
+      S.busy = true; render();
+      DB.sendCode(ph).then(function () { S.otpPhone = ph; }, function (e) { S.authMsg = otpErr(e); }).then(function () { S.busy = false; render(); });
+    } else {
+      var code = digits(v.code); if (code.length < 6) { S.authMsg = 'Enter the 6-digit code from the text.'; render(); return; }
+      S.busy = true; render();
+      DB.verifyCode(S.otpPhone, code).then(function (u) { S.user = u; S.otpPhone = ''; S.loading = true; return loadAcct(); }, function (e) { S.authMsg = otpErr(e); }).then(function () { S.busy = false; render(); });
+    }
   } else if (k === 'create-org') {
     DB.rpc('ed_create_org', { p_name: v.name, p_display: v.me }).then(loadAcct).catch(function (e) { S.authMsg = errMsg(e); render(); });
   } else if (k === 'join') {
