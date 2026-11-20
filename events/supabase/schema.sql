@@ -312,47 +312,6 @@ create table if not exists public.ed_signups (
 );
 create index if not exists ed_signups_event_idx on public.ed_signups (event_id);
 create index if not exists ed_signups_item_idx on public.ed_signups (item_id);
--- version 15: sign in with a text code (Supabase phone auth); a member's login phone is saved on joining
-
--- version 14: background checks (a cleared date and optional expiry on each person; a flag on shifts that need one)
-alter table public.ed_people add column if not exists bg_cleared_on date;
-alter table public.ed_people add column if not exists bg_expires_on date;
-alter table public.ed_items add column if not exists needs_check boolean not null default false;
-
--- version 13: automatic texts and emails (supabase/functions/ed-notify). The function writes the log
--- with the service key; members can read their ministry's log so the app shows what already went out.
-alter table public.ed_orgs add column if not exists auto_remind boolean not null default false;
-alter table public.ed_orgs add column if not exists notify_seen_at timestamptz;
-alter table public.ed_orgs add column if not exists notify_channels text not null default '';
-create table if not exists public.ed_notify_log (
-  id bigserial primary key,
-  org_id uuid not null references public.ed_orgs (id) on delete cascade,
-  key text not null check (length(key) <= 400),
-  kind text not null default '',
-  channel text not null default '',
-  to_name text not null default '',
-  to_addr text not null default '',
-  subject text not null default '',
-  status text not null default 'sending',
-  error text not null default '',
-  created_at timestamptz not null default now(),
-  unique (org_id, key)
-);
-create index if not exists ed_notify_log_org_time on public.ed_notify_log (org_id, created_at desc);
-alter table public.ed_notify_log enable row level security;
-drop policy if exists ed_notify_log_read on public.ed_notify_log;
-create policy ed_notify_log_read on public.ed_notify_log for select to authenticated using (public.ed_is_member(org_id));
-revoke all on public.ed_notify_log from anon, authenticated;
-grant select on public.ed_notify_log to authenticated;
-
--- version 12: volunteer shifts have start and end times; connection cards name who follows up and by when
-alter table public.ed_items add column if not exists start_time time;
-alter table public.ed_items add column if not exists end_time time;
-alter table public.ed_cards add column if not exists follow_up_ref text not null default '';
-alter table public.ed_cards drop constraint if exists ed_cards_follow_up_ref_check;
-alter table public.ed_cards add constraint ed_cards_follow_up_ref_check check (length(follow_up_ref) <= 60);
-alter table public.ed_cards add column if not exists follow_up_on date;
-
 -- version 11: each task records who created it (task_owner); the work goes to the assignees
 alter table public.ed_tasks add column if not exists task_owner text not null default '';
 alter table public.ed_tasks drop constraint if exists ed_tasks_task_owner_check;
@@ -463,6 +422,47 @@ create table if not exists public.ed_cards (
   updated_at timestamptz not null default now()
 );
 create index if not exists ed_cards_event_idx on public.ed_cards (event_id);
+
+-- Upgrades from versions 12 to 15 (they come after every table above exists).
+-- version 15: sign in with a text code (Supabase phone auth); a member's login phone is saved on joining
+
+-- version 14: background checks (a cleared date and optional expiry on each person; a flag on shifts that need one)
+alter table public.ed_people add column if not exists bg_cleared_on date;
+alter table public.ed_people add column if not exists bg_expires_on date;
+alter table public.ed_items add column if not exists needs_check boolean not null default false;
+
+-- version 13: automatic texts and emails (supabase/functions/ed-notify). The function writes the log
+-- with the service key; members can read their ministry's log so the app shows what already went out.
+alter table public.ed_orgs add column if not exists auto_remind boolean not null default false;
+alter table public.ed_orgs add column if not exists notify_seen_at timestamptz;
+alter table public.ed_orgs add column if not exists notify_channels text not null default '';
+create table if not exists public.ed_notify_log (
+  id bigserial primary key,
+  org_id uuid not null references public.ed_orgs (id) on delete cascade,
+  key text not null check (length(key) <= 400),
+  kind text not null default '',
+  channel text not null default '',
+  to_name text not null default '',
+  to_addr text not null default '',
+  subject text not null default '',
+  status text not null default 'sending',
+  error text not null default '',
+  created_at timestamptz not null default now(),
+  unique (org_id, key)
+);
+create index if not exists ed_notify_log_org_time on public.ed_notify_log (org_id, created_at desc);
+alter table public.ed_notify_log enable row level security;
+-- (its read policy is set further down, after the helper functions it uses)
+revoke all on public.ed_notify_log from anon, authenticated;
+grant select on public.ed_notify_log to authenticated;
+
+-- version 12: volunteer shifts have start and end times; connection cards name who follows up and by when
+alter table public.ed_items add column if not exists start_time time;
+alter table public.ed_items add column if not exists end_time time;
+alter table public.ed_cards add column if not exists follow_up_ref text not null default '';
+alter table public.ed_cards drop constraint if exists ed_cards_follow_up_ref_check;
+alter table public.ed_cards add constraint ed_cards_follow_up_ref_check check (length(follow_up_ref) <= 60);
+alter table public.ed_cards add column if not exists follow_up_on date;
 
 -- ============================================================ helpers
 create or replace function public.ed_is_member(oid uuid) returns boolean
@@ -778,6 +778,8 @@ end $$;
 
 drop policy if exists ed_orgs_read on public.ed_orgs;
 create policy ed_orgs_read on public.ed_orgs for select to authenticated using (public.ed_is_member(id));
+drop policy if exists ed_notify_log_read on public.ed_notify_log;
+create policy ed_notify_log_read on public.ed_notify_log for select to authenticated using (public.ed_is_member(org_id));
 drop policy if exists ed_orgs_rename on public.ed_orgs;
 create policy ed_orgs_rename on public.ed_orgs for update to authenticated using (public.ed_is_owner(id)) with check (public.ed_is_owner(id));
 drop policy if exists ed_members_read on public.ed_members;
