@@ -557,13 +557,16 @@ var F_ASSIGN = {
 };
 
 /* ================================================================ auth + setup */
+// Sign in with a texted code needs Supabase phone sign-in turned on with Twilio (a paid service).
+// Off for now: people sign in with email and a password. Set to true once phone sign-in is set up.
+var TEXT_SIGNIN = false;
 function viewAuth() {
   var up = S.authMode === 'up', reset = S.authMode === 'reset';
   var intro = '<div class="auth"><div class="logo">' + IC.tent + '</div><h1>Tent &amp; Table</h1>' +
     '<p class="lead">Plan every event your ministry runs, from the annual tent revival to a monthly board meeting: people, speakers, worship, vendors, equipment, food, money and follow-up.</p>';
   var demo = '<div class="card" style="margin-top:24px"><b>Just Looking?</b><p class="small muted" style="margin:4px 0 10px">Open a demo ministry with sample events. Nothing you change there is saved to an account.</p><button class="btn ghost sm" data-a="try-demo">Try The Demo</button></div></div>';
   // Default: sign in (or create an account) with a code texted to your phone. No password to remember.
-  if (S.authVia !== 'email') {
+  if (TEXT_SIGNIN && S.authVia !== 'email') {
     var sent = S.otpPhone;
     return intro + '<form data-form="auth-phone" class="fgrid">' +
       (sent ? '<div class="fld"><p class="small" style="margin:0">We texted a 6-digit code to <b>' + esc(prettyPhone(S.otpPhone)) + '</b>.</p></div><div class="fld"><label for="a_code">Code</label><input class="inp otp" id="a_code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="8" required autofocus></div>'
@@ -580,7 +583,7 @@ function viewAuth() {
     '<div class="fld"><button class="btn block" type="submit"' + (S.busy ? ' disabled' : '') + '>' + (reset ? 'Send Reset Link' : up ? 'Create Account' : 'Sign In') + '</button></div></form>' +
     (up ? '<p class="small muted">Each login belongs to one ministry. If you serve with two ministries, use a different email for each.</p>' : '') +
     (S.authMsg ? '<div class="err">' + esc(S.authMsg) + '</div>' : '') +
-    '<p class="small muted" style="margin-top:16px">' + (up ? 'Already have an account? <a href="#" data-a="auth-mode" data-v="in">Sign In</a>' : 'New here? <a href="#" data-a="auth-mode" data-v="up">Create An Account</a> · <a href="#" data-a="auth-mode" data-v="reset">Forgot Password</a>') + '</p>' + '<p class="small muted"><a href="#" data-a="auth-via" data-v="phone">Sign in with a text code instead</a></p>' +
+    '<p class="small muted" style="margin-top:16px">' + (up ? 'Already have an account? <a href="#" data-a="auth-mode" data-v="in">Sign In</a>' : 'New here? <a href="#" data-a="auth-mode" data-v="up">Create An Account</a> · <a href="#" data-a="auth-mode" data-v="reset">Forgot Password</a>') + '</p>' + (TEXT_SIGNIN ? '<p class="small muted"><a href="#" data-a="auth-via" data-v="phone">Sign in with a text code instead</a></p>' : '') +
     '<div class="card" style="margin-top:24px"><b>Just Looking?</b><p class="small muted" style="margin:4px 0 10px">Open a demo ministry with sample events. Nothing you change there is saved to an account.</p><button class="btn ghost sm" data-a="try-demo">Try The Demo</button></div></div>';
 }
 function e164(p) { var s = String(p || '').trim(), d = s.replace(/[^0-9]/g, ''); if (s.charAt(0) === '+' && d.length >= 8) return '+' + d; if (d.length === 10) return '+1' + d; if (d.length === 11 && d.charAt(0) === '1') return '+' + d; return ''; }
