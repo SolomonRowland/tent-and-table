@@ -90,22 +90,40 @@ function mailDefaults(tpl, e) {
 }
 
 /* ---------------------------------------------------------------- who gets it */
-function mailAudiences(e) {
-  var ok = function (p) { return p.email && /@/.test(p.email) && !p.no_email && p.status !== 'previous'; };
-  var people = T('ed_people').filter(ok), out = [['all', 'Everyone in Contacts', people]];
-  var grp = {}; people.forEach(function (p) { (p.groups || []).forEach(function (g) { (grp[g] = grp[g] || []).push(p); }); });
-  Object.keys(grp).sort().forEach(function (g) { out.push(['g:' + g, 'Group: ' + g, grp[g]]); });
+// Everyone who can get a group email: contacts with an email who haven't opted out, plus this event's
+// sign-ups who said it's okay to contact them. One row per email address, each with the labels it can be picked by.
+function mailPool(e) {
+  var seen = {}, list = [];
+  var add = function (name, email, phone, tags) {
+    var em = String(email || '').trim().toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return;
+    var r = seen[em]; if (!r) { r = seen[em] = { email: em, name: name || em, phone: phone || '', tags: [] }; list.push(r); }
+    tags.forEach(function (t) { if (t && r.tags.indexOf(t) < 0) r.tags.push(t); });
+  };
+  T('ed_people').forEach(function (p) { if (!p.no_email && p.status !== 'previous') add(p.name, p.email, p.phone, (p.groups || []).length ? p.groups : ['Contact']); });
+  T('ed_vendors').forEach(function (v) { add(v.contact_name || v.name, v.email, v.phone, ['Vendor']); });
+  T('ed_contacts').forEach(function (c) { add(c.name, c.email, c.phone, ['Other']); });
   if (e) {
     var its = evRows('ed_items', e).map(function (i) { return i.id; });
-    var su = evRows('ed_signups', e).filter(function (s) { return its.indexOf(s.item_id) >= 0 && s.email && /@/.test(s.email) && s.consent; });
-    out.push(['rsvp', 'People who signed up for this event and said okay to contact', su]);
+    evRows('ed_signups', e).forEach(function (s) { if (its.indexOf(s.item_id) >= 0 && s.consent) add(s.name, s.email, s.phone, ['Signed Up For This Event']); });
   }
-  return out.map(function (a) {
-    var seen = {}, list = [];
-    a[2].forEach(function (p) { var em = String(p.email).trim().toLowerCase(); if (seen[em]) return; seen[em] = 1; list.push({ email: em, name: p.name || '', phone: p.phone || '' }); });
-    return { k: a[0], label: a[1], list: list };
-  });
+  return list.sort(function (x, y) { return x.name.localeCompare(y.name); });
 }
+function mailTags(pool) { var c = {}; pool.forEach(function (r) { r.tags.forEach(function (t) { c[t] = (c[t] || 0) + 1; }); }); return Object.keys(c).sort().map(function (t) { return [t, c[t]]; }); }
+// Who is picked is kept as a set of emails while editing (S.mailSel) and saved compactly with the draft.
+function mailSelLoad(m, pool) {
+  var f = m.fields || {}, sel = {};
+  if (f.to === 'all') pool.forEach(function (r) { sel[r.email] = 1; });
+  else if (Array.isArray(f.to)) f.to.forEach(function (x) { sel[x] = 1; });
+  else if (Array.isArray(f.not)) { var no = {}; f.not.forEach(function (x) { no[x] = 1; }); pool.forEach(function (r) { if (!no[r.email]) sel[r.email] = 1; }); }
+  return sel;
+}
+function mailSelSave(m, pool) {
+  var sel = S.mailSel || {}, on = pool.filter(function (r) { return sel[r.email]; }).map(function (r) { return r.email; }), off = pool.filter(function (r) { return !sel[r.email]; }).map(function (r) { return r.email; });
+  delete m.fields.to; delete m.fields.not;
+  if (pool.length && !off.length) m.fields.to = 'all'; else if (off.length < on.length) m.fields.not = off; else m.fields.to = on;
+  m.audience = on.length + ' picked';
+}
+function mailPicked(pool) { var sel = S.mailSel || {}; return pool.filter(function (r) { return sel[r.email]; }); }
 
 /* ---------------------------------------------------------------- the screen */
 function mailList(e) {
@@ -121,7 +139,7 @@ function mailRead() {
   var m = S.mail, root = document.querySelector('#layer .sheet'); if (!m || !root || !root.querySelector('#ml_subject')) return;
   m.subject = root.querySelector('#ml_subject').value.trim(); m.fields.headline = root.querySelector('#ml_headline').value.trim();
   m.fields.message = root.querySelector('#ml_message').value.trim(); m.fields.button = root.querySelector('#ml_button').value.trim();
-  m.fields.link = root.querySelector('#ml_link').value; m.audience = root.querySelector('#ml_aud').value;
+  m.fields.link = root.querySelector('#ml_link').value;
 }
 function mailData(m, forSend) {
   var e = byId('ed_events', m.event_id) || S.ev, o = org() || {};
@@ -133,13 +151,27 @@ function mailPreviewHtml(m) {
   return mailHtml(m.template, mailData(m)).replace(/\{\{first_name\}\}/g, mailEsc(first)).replace(/\{\{guest\}\}/g, '').replace(/\{\{unsub_url\}\}/g, '#');
 }
 function mailSheet() {
-  var m = S.mail, e = byId('ed_events', m.event_id) || S.ev, auds = mailAudiences(e), aud = auds.find(function (a) { return a.k === m.audience; }) || auds[0], sent = m.status === 'sent';
+  var m = S.mail, e = byId('ed_events', m.event_id) || S.ev, pool = mailPool(e), picked = mailPicked(pool), sent = m.status === 'sent';
   if (S.mailView === 'preview') {
     return '<h3>Preview</h3><p class="lead">This is what people will see. Subject: <b>' + esc(m.subject) + '</b></p><iframe class="mailframe" title="Email preview" sandbox="" srcdoc="' + esc(mailPreviewHtml(m)) + '"></iframe>' +
       '<div class="acts"><span class="grow"></span><button class="btn plain" data-a="mail-view" data-id="edit">Back To Editing</button></div>';
   }
+  if (S.mailView === 'pick') {
+    var sel = S.mailSel || {}, tags = mailTags(pool), allOn = pool.length && picked.length === pool.length;
+    return '<h3>Send To</h3><p class="lead">Tap names one at a time, or use the buttons to pick a whole group. <b id="ml_count">' + picked.length + ' of ' + pool.length + ' picked</b></p>' +
+      '<div class="pickchips"><button class="chip' + (allOn ? ' on' : '') + '" data-a="mail-pick-all" aria-pressed="' + !!allOn + '">Everyone · ' + pool.length + '</button>' + tags.map(function (t) {
+        var g = pool.filter(function (r) { return r.tags.indexOf(t[0]) >= 0; }), on = g.every(function (r) { return sel[r.email]; });
+        return '<button class="chip' + (on ? ' on' : '') + '" data-a="mail-pick-tag" data-id="' + esc(t[0]) + '" aria-pressed="' + on + '">' + esc(t[0]) + ' · ' + t[1] + '</button>';
+      }).join('') + (picked.length ? '<button class="chip clear" data-a="mail-pick-none">Clear All</button>' : '') + '</div>' +
+      (pool.length > 8 ? '<input class="inp" type="search" id="ml_q" placeholder="Search names or emails" aria-label="Search names or emails" autocomplete="off">' : '') +
+      (pool.length ? '<div class="mailpick" role="group" aria-label="Contacts">' + pool.map(function (r) {
+        return '<label class="mprow" data-q="' + esc((r.name + ' ' + r.email + ' ' + r.tags.join(' ')).toLowerCase()) + '"><input type="checkbox" data-mail-pick="' + esc(r.email) + '"' + (sel[r.email] ? ' checked' : '') + '><span class="mp-main"><b>' + esc(r.name) + '</b><span>' + esc(r.email) + '</span></span><span class="mp-tag">' + esc(r.tags[0] || '') + (r.tags.length > 1 ? ' +' + (r.tags.length - 1) : '') + '</span></label>';
+      }).join('') + '</div><p class="small muted" id="ml_none" hidden>No one matches that search.</p>' : '<div class="empty card">No contacts with an email address yet. Add emails in the Directory.</div>') +
+      '<p class="small muted">Only people with an email address are listed. Anyone who unsubscribed or didn’t agree to be contacted is left off.</p>' +
+      '<div class="acts"><span class="grow"></span><button class="btn" data-a="mail-view" data-id="edit">Done</button></div>';
+  }
   if (S.mailView === 'confirm') {
-    return '<h3>Send to ' + esc(plural(aud.list.length, 'person', 'people')) + '?</h3><p class="lead">' + esc(aud.label) + '. Each person gets their own copy with their own RSVP link and an unsubscribe link. Once it’s sent it can’t be pulled back.</p>' +
+    return '<h3>Send to ' + esc(plural(picked.length, 'person', 'people')) + '?</h3><p class="lead">' + esc(picked.slice(0, 4).map(function (r) { return r.name; }).join(', ') + (picked.length > 4 ? ' and ' + (picked.length - 4) + ' more' : '')) + '. Each person gets their own copy with their own RSVP link and an unsubscribe link. Once it’s sent it can’t be pulled back.</p>' +
       '<div class="acts"><span class="grow"></span><button class="btn plain" data-a="mail-view" data-id="edit">Go Back</button><button class="btn" data-save data-a="mail-go">Send Now</button></div>';
   }
   if (sent) {
@@ -159,17 +191,18 @@ function mailSheet() {
     '<div class="fld half"><label for="ml_link">Button Opens</label><select class="inp" id="ml_link">' + MAIL_LINKS.map(function (l) { return '<option value="' + l[0] + '"' + ((m.fields.link || 'r') === l[0] ? ' selected' : '') + '>' + esc(l[1]) + '</option>'; }).join('') + '</select></div>' +
     '<fieldset class="fld"><legend>Photos (Up To 3)</legend><div class="mailphotos">' + ph.map(function (u, i) { return '<span class="mph"><img src="' + esc(u) + '" alt="Photo ' + (i + 1) + '"><button type="button" class="mph-x" data-a="mail-photo-x" data-id="' + i + '" aria-label="Remove photo ' + (i + 1) + '">' + IC.close + '</button></span>'; }).join('') +
       (ph.length < 3 ? '<label class="mph add">' + IC.plus + '<span>Add</span><input type="file" accept="image/*" data-mail-photo hidden></label>' : '') + '</div><span class="hint">Last year’s photos work well. The first one is the large photo in Photo Story.</span></fieldset>' +
-    '<div class="fld"><label for="ml_aud">Send To</label><select class="inp" id="ml_aud">' + auds.map(function (a) { return '<option value="' + esc(a.k) + '"' + (a.k === aud.k ? ' selected' : '') + '>' + esc(a.label + ' · ' + a.list.length) + '</option>'; }).join('') + '</select><span class="hint">Only contacts with an email address. Anyone who unsubscribed or didn’t agree to be contacted is left out.</span></div></div>' +
+    '<div class="fld"><label>Send To</label><button type="button" class="sendto" data-a="mail-view" data-id="pick"><span class="st-main"><b>' + (picked.length ? esc(plural(picked.length, 'person', 'people')) : 'Choose who gets this') + '</b><span>' + (picked.length ? esc(picked.slice(0, 3).map(function (r) { return r.name; }).join(', ') + (picked.length > 3 ? ' and ' + (picked.length - 3) + ' more' : '')) : 'Pick one person, a few, a whole group, or everyone.') + '</span></span>' + IC.down + '</button></div></div>' +
     (S.mailNote ? '<p class="mailnote" role="status">' + esc(S.mailNote) + '</p>' : '') +
     '<div class="acts mailacts">' + (m.id ? '<button class="btn ghost" data-a="mail-del">Delete</button>' : '') + '<span class="grow"></span><button class="btn plain" data-a="mail-view" data-id="preview">Preview</button><button class="btn plain" data-a="mail-test">Send Me A Test</button><button class="btn" data-save data-a="mail-send">Send…</button></div>' +
     '<p class="small muted" style="margin-top:8px"><button class="link inline" data-a="mail-save">Save as a draft</button> to finish later.</p>';
 }
-function mailOpen(m) { S.mail = m; S.mailView = m.status === 'sent' ? 'sent' : 'edit'; S.mailNote = ''; openSheet(mailSheet, null); }
+function mailOpen(m) { S.mail = m; S.mailView = m.status === 'sent' ? 'sent' : 'edit'; S.mailNote = ''; S.mailSel = mailSelLoad(m, mailPool(byId('ed_events', m.event_id) || S.ev)); openSheet(mailSheet, null); }
 function mailNew(tpl) {
   var e = S.ev, d = mailDefaults(tpl || 'invite', e);
-  return { id: null, org_id: org().id, event_id: e.id, template: tpl || 'invite', subject: d.subject, fields: { headline: d.headline, message: d.message, button: d.button, link: d.link, photos: [] }, audience: 'all', status: 'draft' };
+  return { id: null, org_id: org().id, event_id: e.id, template: tpl || 'invite', subject: d.subject, fields: { headline: d.headline, message: d.message, button: d.button, link: d.link, photos: [], to: [] }, audience: '', status: 'draft' };
 }
 function mailRow(m, extra) {
+  mailSelSave(m, mailPool(byId('ed_events', m.event_id) || S.ev));
   var r = { org_id: m.org_id, event_id: m.event_id, template: m.template, subject: m.subject, fields: Object.assign({}, m.fields), audience: m.audience, status: m.status || 'draft', created_by: myMember().name || '' };
   if (m.id) r.id = m.id;
   return Object.assign(r, extra || {});
@@ -207,6 +240,12 @@ var MAIL_ACTIONS = {
     m.template = id; redrawSheet();
   },
   'mail-view': function (t, id) { mailRead(); S.mailView = id === 'edit' && S.mail.status === 'sent' ? 'sent' : id; S.sheet.err = ''; redrawSheet(); },
+  'mail-pick-all': function () { var pool = mailPool(byId('ed_events', S.mail.event_id) || S.ev), all = pool.every(function (r) { return S.mailSel[r.email]; }); S.mailSel = {}; if (!all) pool.forEach(function (r) { S.mailSel[r.email] = 1; }); redrawSheet(); },
+  'mail-pick-none': function () { S.mailSel = {}; redrawSheet(); },
+  'mail-pick-tag': function (t, tag) {
+    var g = mailPool(byId('ed_events', S.mail.event_id) || S.ev).filter(function (r) { return r.tags.indexOf(tag) >= 0; }), on = g.every(function (r) { return S.mailSel[r.email]; });
+    g.forEach(function (r) { if (on) delete S.mailSel[r.email]; else S.mailSel[r.email] = 1; }); redrawSheet();
+  },
   'mail-photo-x': function (t, id) { mailRead(); S.mail.fields.photos.splice(+id, 1); redrawSheet(); },
   'mail-save': function () { mailRead(); busy(mailSaveDraft(true), 'Draft saved').then(function () { render(); }).catch(function () {}); },
   'mail-del': function () {
@@ -221,15 +260,14 @@ var MAIL_ACTIONS = {
   },
   'mail-send': function () {
     mailRead(); var m = S.mail, bad = mailCheck(m); if (bad) { sheetErr(bad); return; }
-    var e = byId('ed_events', m.event_id) || S.ev, aud = mailAudiences(e).find(function (a) { return a.k === m.audience; });
-    if (!aud || !aud.list.length) { sheetErr('No one in that group has an email address yet.'); return; }
+    if (!mailPicked(mailPool(byId('ed_events', m.event_id) || S.ev)).length) { sheetErr('Choose who gets this email first. Tap Send To.'); return; }
     S.mailView = 'confirm'; S.sheet.err = ''; redrawSheet();
   },
   'mail-go': function () {
-    var m = S.mail, e = byId('ed_events', m.event_id) || S.ev, aud = mailAudiences(e).find(function (a) { return a.k === m.audience; }), total = aud.list.length;
+    var m = S.mail, e = byId('ed_events', m.event_id) || S.ev, list = mailPicked(mailPool(e)), total = list.length;
     S.mailView = 'edit'; mailBusy(true, 'Getting ready…');
     mailHosted(m).then(function () { return DB.save('ed_mailings', mailRow(m, { html: mailFinal(m), base_url: mailBase(), status: 'sending' })); })
-      .then(function (r) { put('ed_mailings', r); m.id = r.id; m.status = 'sending'; return DB.mailQueue(r.id, org().id, aud.list); })
+      .then(function (r) { put('ed_mailings', r); m.id = r.id; m.status = 'sending'; return DB.mailQueue(r.id, org().id, list); })
       .then(function () {
         var loop = function () {
           return DB.mail('send', { mailing_id: m.id }).then(function (r) {
@@ -274,3 +312,16 @@ function viewUnsub() {
   var u = S.unsub || {};
   return '<main class="auth"><div class="logo">' + IC.tent + '</div>' + (u.err ? '<h1>Something Went Wrong</h1><p class="lead">' + esc(u.err) + '</p>' : u.done ? '<h1>You’re Unsubscribed</h1><p class="lead">' + esc(u.org ? u.org + ' won’t send you' : 'You won’t get') + ' any more group emails. If this was a mistake, just let them know and they can add you back.</p>' : '<p class="muted">One moment…</p>') + '</main>';
 }
+
+// The people picker: ticking a name updates the count right away; typing in the search box narrows the list without losing your place.
+document.addEventListener('change', function (ev) {
+  var t = ev.target; if (!t || !t.getAttribute || !t.hasAttribute('data-mail-pick') || !S.mail) return;
+  var em = t.getAttribute('data-mail-pick'); if (t.checked) S.mailSel[em] = 1; else delete S.mailSel[em];
+  var c = document.getElementById('ml_count'), n = Object.keys(S.mailSel).length, all = document.querySelectorAll('#layer .mprow').length; if (c) c.textContent = n + ' of ' + all + ' picked';
+});
+document.addEventListener('input', function (ev) {
+  var t = ev.target; if (!t || t.id !== 'ml_q') return;
+  var q = t.value.trim().toLowerCase(), shown = 0;
+  document.querySelectorAll('#layer .mprow').forEach(function (r) { var ok = !q || r.getAttribute('data-q').indexOf(q) >= 0; r.hidden = !ok; if (ok) shown++; });
+  var none = document.getElementById('ml_none'); if (none) none.hidden = shown > 0;
+});

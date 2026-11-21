@@ -904,6 +904,9 @@ create table if not exists public.ed_mailings (
   updated_at timestamptz not null default now()
 );
 create index if not exists ed_mailings_org_idx on public.ed_mailings (org_id);
+-- room for a hand-picked list of recipients on a draft
+alter table public.ed_mailings drop constraint if exists ed_mailings_fields_check;
+alter table public.ed_mailings add constraint ed_mailings_fields_check check (jsonb_typeof(fields) = 'object' and pg_column_size(fields) < 200000);
 create table if not exists public.ed_mail_rcpt (
   id uuid primary key default gen_random_uuid(),
   mailing_id uuid not null references public.ed_mailings (id) on delete cascade,
