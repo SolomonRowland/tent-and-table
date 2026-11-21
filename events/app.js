@@ -43,6 +43,7 @@ function errMsg(e) {
   if (/password should be|weak password/i.test(m)) return 'Use a password with at least 8 characters.';
   if (/email not confirmed/i.test(m)) return 'Confirm your email first, then sign in.';
   if (/failed to fetch|network|load failed/i.test(m)) return 'Can’t connect right now. Check your connection and try again.';
+  if (/column/i.test(m) && /schema cache/i.test(m)) return 'The app tried to save a field the database doesn’t have. Please send a screenshot of this to whoever set up the app. (' + m + ')';
   if (/does not exist|schema cache/i.test(m)) return 'The database isn’t set up yet. Run events/supabase/schema.sql in Supabase.';
   if (/duplicate key|unique/i.test(m)) return 'That’s already been added.';
   return m || 'Something went wrong. Try again.';
@@ -832,7 +833,7 @@ function newContact(type, after) {
 var DIRFORM = { ed_people: ['person', 'Contact'], ed_vendors: ['vendor', 'Vendor'], ed_contacts: ['contact', 'Contact'], ed_equipment: ['equipment', 'Equipment'], ed_budget: ['budget', 'Budget Line'] };
 function editDir(t, rec, after) {
   var d = DIRFORM[t];
-  editRow(t, rec, F[d[0]], { title: (rec ? 'Edit ' : 'Add ') + d[1], base: rec ? null : { org_id: org().id, status: 'current', groups: S.newGroups || [] },
+  editRow(t, rec, F[d[0]], { title: (rec ? 'Edit ' : 'Add ') + d[1], base: rec ? null : t === 'ed_people' ? { org_id: org().id, status: 'current', groups: S.newGroups || [] } : { org_id: org().id },
     prep: function (v) { v.org_id = org().id; if (t === 'ed_budget' && !v.event_id) v.event_id = null; if (t === 'ed_equipment') v.quantity = Math.max(0, v.quantity || 0); return v; },
     after: after, delMsg: t === 'ed_equipment' ? 'Delete this from your equipment?' : t === 'ed_budget' ? 'Delete this budget line?' : 'Delete this contact?', delSub: rec && usedIn(t, rec.id).length ? 'It will also be removed from every event that uses it.' : '' });
 }
