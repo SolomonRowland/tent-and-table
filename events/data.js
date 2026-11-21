@@ -12,7 +12,7 @@ var EVENT_TABLES = ['ed_event_people', 'ed_event_vendors', 'ed_event_contacts', 
   'ed_agenda', 'ed_setlists', 'ed_items', 'ed_signups', 'ed_offerings', 'ed_expenses', 'ed_cards', 'ed_prayer'];
 // Rows that go away with their parent (the database does this with "on delete cascade").
 var CASCADE = {
-  ed_events: EVENT_TABLES.map(function (t) { return [t, 'event_id']; }),
+  ed_events: EVENT_TABLES.map(function (t) { return [t, 'event_id']; }).concat([['ed_mailings', 'event_id']]),
   ed_people: [['ed_event_people', 'person_id']], ed_vendors: [['ed_event_vendors', 'vendor_id']],
   ed_contacts: [['ed_event_contacts', 'contact_id']], ed_equipment: [['ed_event_equipment', 'equipment_id']],
   ed_items: [['ed_signups', 'item_id']]
@@ -80,7 +80,19 @@ function CloudDB() {
       return go(4);
     },
     remove: function (t, id) { return q(sb.from(t).delete().eq('id', id)); },
-    rpc: function (name, args) { return q(sb.rpc(name, args)); }
+    rpc: function (name, args) { return q(sb.rpc(name, args)); },
+    // bulk email: photos go to public storage, recipients are queued one row each, and the ed-mail function does the sending
+    upload: function (path, blob) { return sb.storage.from('ed-mail').upload(path, blob, { upsert: true, contentType: blob.type || 'image/jpeg', cacheControl: '31536000' }).then(function (r) { if (r.error) throw r.error; return sb.storage.from('ed-mail').getPublicUrl(path).data.publicUrl; }); },
+    mailQueue: function (mid, oid, list) {
+      var chunks = []; for (var i = 0; i < list.length; i += 200) chunks.push(list.slice(i, i + 200));
+      return chunks.reduce(function (p, c) { return p.then(function () { return q(sb.from('ed_mail_rcpt').upsert(c.map(function (r) { return { mailing_id: mid, org_id: oid, email: r.email, name: (r.name || '').slice(0, 120), phone: (r.phone || '').slice(0, 40) }; }), { onConflict: 'mailing_id,email', ignoreDuplicates: true })); }); }, Promise.resolve());
+    },
+    mail: function (action, body) {
+      return sb.functions.invoke('ed-mail', { body: Object.assign({ action: action }, body) }).then(function (r) {
+        if (r.error) { var c = r.error.context; if (c && c.json) return c.json().then(function (j) { throw new Error((j && j.error) || r.error.message); }, function () { throw r.error; }); throw r.error; }
+        return r.data;
+      });
+    }
   };
 }
 
@@ -111,7 +123,7 @@ function DemoDB() {
     var org = T('ed_orgs').find(function (o) { return o.id === ev.org_id; }) || {};
     return { event: { slug: ev.slug, title: ev.title, starts_on: ev.starts_on, ends_on: ev.ends_on, time_label: ev.time_label, place: ev.place, address: ev.address, about: ev.about, contact_line: ev.contact_line, giving_link: ev.giving_link, volunteer_goal: ev.volunteer_goal || 0, volunteer_count: T('ed_signups').filter(function (s) { var i = T('ed_items').find(function (x) { return x.id === s.item_id; }); return i && i.event_id === ev.id && i.kind === 'serve'; }).length + T('ed_event_people').filter(function (p) { return p.event_id === ev.id && p.team === 'volunteer'; }).length, is_open: ev.is_open, sections: ev.sections || [], ministry: org.name, logo: org.logo || '' },
       items: T('ed_items').filter(function (i) { return i.event_id === ev.id; }).sort(function (a, b) { return String(a.on_date || '').localeCompare(String(b.on_date || '')) || a.sort - b.sort; }).map(function (i) {
-        return { id: i.id, kind: i.kind, title: i.title, on_date: i.on_date, time_label: i.time_label, needed: i.needed, notes: i.notes, needs_check: !!i.needs_check, taken: T('ed_signups').filter(function (s) { return s.item_id === i.id; }).reduce(function (n, s) { return n + (i.kind === 'attend' ? (s.party || 1) : 1); }, 0), names: i.kind === 'attend' ? [] : T('ed_signups').filter(function (s) { return s.item_id === i.id; }).map(function (s) { return s.name.split(' ')[0]; }) };
+        return { id: i.id, kind: i.kind, title: i.title, on_date: i.on_date, time_label: i.time_label, needed: i.needed, notes: i.notes, needs_check: !!i.needs_check, fee: i.fee || 0, taken: T('ed_signups').filter(function (s) { return s.item_id === i.id; }).reduce(function (n, s) { return n + (i.kind === 'attend' ? (s.party || 1) : 1); }, 0), names: i.kind === 'attend' ? [] : T('ed_signups').filter(function (s) { return s.item_id === i.id; }).map(function (s) { return s.name.split(' ')[0]; }) };
       }) };
   }
   var RPC = {
@@ -120,6 +132,8 @@ function DemoDB() {
     ed_accept_invite: function () { throw new Error('Invites work once the app is connected to your database.'); },
     ed_remove_member: function (a) { D.t.ed_members = T('ed_members').filter(function (m) { return !(m.org_id === a.oid && m.user_id === a.uid); }); return null; },
     ed_public: function (a) { return pub(a.p_slug); },
+    ed_guest: function (a) { var r = T('ed_mail_rcpt').find(function (x) { return x.id === a.p_rcpt; }); return r ? { name: r.name, email: r.email, phone: r.phone } : null; },
+    ed_unsubscribe: function (a) { var r = T('ed_mail_rcpt').find(function (x) { return x.id === a.p_rcpt; }); if (!r) return ''; T('ed_people').forEach(function (p) { if (String(p.email || '').toLowerCase() === r.email) p.no_email = true; }); return (T('ed_orgs')[0] || {}).name || ''; },
     ed_sign: function (a) {
       var p = pub(a.p_slug); if (!p) throw new Error('This event was not found.');
       if (!p.event.is_open) throw new Error('Sign-ups for this event are closed.');
@@ -129,7 +143,7 @@ function DemoDB() {
       var pty = it.kind === 'attend' ? Math.min(50, Math.max(1, parseInt(a.p_party, 10) || 1)) : 1;
       var taken = T('ed_signups').filter(function (s) { return s.item_id === it.id; }).reduce(function (n, s) { return n + (it.kind === 'attend' ? (s.party || 1) : 1); }, 0);
       if (taken + pty > it.needed) throw new Error(it.kind === 'attend' && taken < it.needed ? 'Only ' + (it.needed - taken) + ' seats are left for this one.' : 'That one just filled up. Please pick another.');
-      return put('ed_signups', { event_id: it.event_id, item_id: it.id, name: a.p_name.trim(), phone: a.p_phone || '', email: a.p_email || '', note: a.p_note || '', party: pty, checked_in_at: null }).token;
+      return put('ed_signups', { event_id: it.event_id, item_id: it.id, name: a.p_name.trim(), phone: a.p_phone || '', email: a.p_email || '', note: a.p_note || '', party: pty, consent: !!a.p_consent, paid: false, checked_in_at: null }).token;
     },
     ed_unsign: function (a) { D.t.ed_signups = T('ed_signups').filter(function (s) { return s.token !== a.p_token; }); return null; },
     ed_mine: function (a) { return T('ed_signups').filter(function (s) { return a.p_tokens.indexOf(s.token) >= 0; }).map(function (s) { return { token: s.token, item_id: s.item_id, name: s.name }; }); },
@@ -208,7 +222,16 @@ function DemoDB() {
     listIn: function (t, col, vals) { return ok(T(t).filter(function (r) { return vals.indexOf(r[col]) >= 0; })); },
     save: function (t, row) { var r = put(t, row); persist(); return ok(r); },
     remove: function (t, id) { del(t, id); persist(); return ok(); },
-    rpc: function (name, args) { try { var v = RPC[name](args || {}); persist(); return ok(v); } catch (e) { return fail(e.message); } }
+    rpc: function (name, args) { try { var v = RPC[name](args || {}); persist(); return ok(v); } catch (e) { return fail(e.message); } },
+    // The demo walks through sending an email without sending anything.
+    mailQueue: function (mid, oid, list) { list.forEach(function (r) { if (!T('ed_mail_rcpt').some(function (x) { return x.mailing_id === mid && x.email === r.email; })) T('ed_mail_rcpt').push({ id: uuid(), mailing_id: mid, org_id: oid, email: r.email, name: r.name, phone: r.phone, status: 'queued' }); }); persist(); return ok(); },
+    mail: function (action, body) {
+      if (action === 'test') return ok({ ok: true, to: D.me.email + ' (demo: nothing is really sent)' });
+      var m = T('ed_mailings').find(function (x) { return x.id === body.mailing_id; }), q0 = T('ed_mail_rcpt').filter(function (x) { return x.mailing_id === body.mailing_id; });
+      q0.forEach(function (x) { x.status = 'sent'; });
+      if (m) { m.status = 'sent'; m.sent_at = now(); m.fields = Object.assign({}, m.fields, { stats: { sent: q0.length, failed: 0, skipped: 0 } }); }
+      persist(); return ok({ ok: true, left: 0 });
+    }
   };
 }
 

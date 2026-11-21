@@ -885,6 +885,37 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 .toast{display:flex;align-items:center;gap:8px;max-width:calc(100vw - 32px);margin-bottom:var(--kb,0px);box-shadow:0 6px 20px rgba(17,20,24,.22);animation:toastIn .22s cubic-bezier(.2,.8,.2,1)}
 @keyframes toastIn{from{transform:translate(-50%,10px);opacity:0}}
 @media(max-width:350px){.top .areabar{padding:3px;gap:2px}.top .areabar button{font-size:11.5px;letter-spacing:-.015em;text-overflow:clip}}
+/* ---- RSVP fee note, "text from" chooser, and the email builder ---- */
+.feenote{margin:0 0 12px;padding:10px 12px;border-radius:10px;background:var(--amber-tint);color:var(--amber);font-size:14px;font-weight:600}
+.fromlist{display:grid;gap:10px;margin:4px 0 14px}
+.fromopt{display:block;padding:14px 16px;border:1.5px solid #E3DADB;border-radius:14px;background:#fff;color:var(--ink);text-decoration:none}
+.fromopt:active{transform:scale(.985)}
+.fromopt b{display:block;font-size:16px}
+.fromopt span{display:block;font-size:13px;color:var(--muted);margin-top:2px;line-height:1.4}
+button.act{border:0;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.tplpick{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+@media(max-width:480px){.tplpick{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.tpl{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 4px;border:1.5px solid #E3DADB;border-radius:12px;background:#fff;min-width:0}
+.tpl b{font-size:11.5px;font-weight:700;text-align:center;line-height:1.2;color:var(--ink)}
+.tpl.on{border-color:var(--red);box-shadow:0 0 0 3px rgba(215,19,29,.14)}
+.tpl-art{display:flex;flex-direction:column;gap:3px;width:46px;height:56px;border-radius:5px;background:#fff;box-shadow:inset 0 0 0 1px var(--edge);overflow:hidden;padding:0 5px 5px}
+.tpl-art i{display:block;height:4px;border-radius:2px;background:#D9D5CF}
+.tpl-art i:first-child{height:14px;margin:0 -5px 3px;border-radius:0;background:var(--red)}
+.tpl-art i:last-child{width:60%;align-self:center;background:var(--red);height:6px;border-radius:3px;margin-top:auto}
+.tpl-art.t-photo i:first-child{height:24px;background:linear-gradient(135deg,#C9B8A6,#8C7B6B)}
+.tpl-art.t-letter i:first-child{height:6px;width:14px;margin:6px 0 4px;border-radius:2px;background:var(--ink)}
+.tpl-art.t-letter i:last-child{background:var(--ink)}
+.tpl-art.t-reminder i:first-child{height:22px}
+.tpl-art.t-thanks i:first-child{height:18px;background:var(--ink)}
+.mailphotos{display:flex;flex-wrap:wrap;gap:8px}
+.mph{position:relative;width:86px;height:86px;border-radius:12px;overflow:hidden;background:var(--well);flex:0 0 auto}
+.mph img{width:100%;height:100%;object-fit:cover;display:block}
+.mph-x{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;background:rgba(18,20,23,.7);color:#fff;display:grid;place-items:center}
+.mph-x svg{width:14px;height:14px}
+.mph.add{display:grid;place-items:center;align-content:center;gap:2px;border:1.5px dashed #D9CFCF;background:#fff;color:var(--red);font-size:12px;font-weight:700;cursor:pointer}
+.mailframe{display:block;width:100%;height:62vh;border:1px solid var(--edge);border-radius:12px;background:#F5F3F0}
+.mailnote{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:var(--green-tint);color:var(--green);font-size:14px;font-weight:600}
+.mailacts{flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -893,6 +924,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visi
 <script src="qrcode.js"></script>
 <script src="../home/supabase.js"></script>
 <script src="data.js"></script>
+<script src="mail.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
--- Tent & Table database (version 15).
+-- Tent & Table database (version 16).
 -- Paste this whole file into Supabase: SQL Editor -> New query -> Run.
 -- It is safe to run more than once. Every table starts with "ed_", so it can
 -- share a Supabase project with Tend Home without touching Tend's data.
@@ -423,7 +423,16 @@ create table if not exists public.ed_cards (
 );
 create index if not exists ed_cards_event_idx on public.ed_cards (event_id);
 
--- Upgrades from versions 12 to 15 (they come after every table above exists).
+-- Upgrades from versions 12 to 16 (they come after every table above exists).
+-- version 16: registration fee on a service, consent to contact and paid on an RSVP, "no bulk email" on a contact, ministry tax number
+alter table public.ed_items add column if not exists fee numeric(8,2) not null default 0;
+alter table public.ed_items drop constraint if exists ed_items_fee_check;
+alter table public.ed_items add constraint ed_items_fee_check check (fee >= 0 and fee <= 10000);
+alter table public.ed_signups add column if not exists consent boolean not null default false;
+alter table public.ed_signups add column if not exists paid boolean not null default false;
+alter table public.ed_people add column if not exists no_email boolean not null default false;
+alter table public.ed_orgs add column if not exists tax_id text not null default '' check (length(tax_id) <= 40);
+
 -- version 15: sign in with a text code (Supabase phone auth); a member's login phone is saved on joining
 
 -- version 14: background checks (a cleared date and optional expiry on each person; a flag on shifts that need one)
@@ -673,7 +682,7 @@ begin
       'logo', (select logo from public.ed_orgs where id = ev.org_id)),
     'items', coalesce((
       select jsonb_agg(jsonb_build_object('id', i.id, 'kind', i.kind, 'title', i.title, 'on_date', i.on_date,
-        'time_label', i.time_label, 'needed', i.needed, 'notes', i.notes, 'needs_check', i.needs_check,
+        'time_label', i.time_label, 'needed', i.needed, 'notes', i.notes, 'needs_check', i.needs_check, 'fee', i.fee,
         'taken', coalesce((select case when i.kind = 'attend' then sum(s.party) else count(*) end
                            from public.ed_signups s where s.item_id = i.id), 0),
         'names', case when i.kind = 'attend' then '[]'::jsonb else coalesce((select jsonb_agg(split_part(s.name, ' ', 1) order by s.created_at)
@@ -685,7 +694,8 @@ begin
 end $$;
 
 drop function if exists public.ed_sign(text, uuid, text, text, text, text);
-create or replace function public.ed_sign(p_slug text, p_item uuid, p_name text, p_phone text, p_email text, p_note text, p_party int default 1)
+drop function if exists public.ed_sign(text, uuid, text, text, text, text, int);
+create or replace function public.ed_sign(p_slug text, p_item uuid, p_name text, p_phone text, p_email text, p_note text, p_party int default 1, p_consent boolean default false)
 returns text language plpgsql security definer set search_path = public as $$
 declare ev public.ed_events; it public.ed_items; taken int; tok text; pty int;
   nm text := ed_clip(p_name, 80); ph text := ed_clip(p_phone, 40); em text := lower(ed_clip(p_email, 120));
@@ -708,8 +718,8 @@ begin
     if it.kind = 'attend' and taken < it.needed then raise exception 'Only % seats are left for this one.', it.needed - taken; end if;
     raise exception 'That one just filled up. Please pick another.';
   end if;
-  insert into public.ed_signups (event_id, item_id, name, phone, email, note, party)
-    values (ev.id, it.id, nm, ph, em, ed_clip(p_note, 300), pty) returning token into tok;
+  insert into public.ed_signups (event_id, item_id, name, phone, email, note, party, consent)
+    values (ev.id, it.id, nm, ph, em, ed_clip(p_note, 300), pty, coalesce(p_consent, false)) returning token into tok;
   return tok;
 end $$;
 
@@ -827,7 +837,7 @@ create policy ed_event_equipment_all on public.ed_event_equipment for all to aut
 -- ---------- grants
 revoke all on public.ed_orgs, public.ed_members, public.ed_invites from authenticated;
 grant select on public.ed_orgs, public.ed_members to authenticated;
-grant update (name, website, email, phone, address, about, giving_link, timezone, logo, auto_remind) on public.ed_orgs to authenticated;
+grant update (name, website, email, phone, address, about, giving_link, timezone, logo, auto_remind, tax_id) on public.ed_orgs to authenticated;
 grant update (name, phone, prefs) on public.ed_members to authenticated;
 grant select, delete on public.ed_invites to authenticated;
 grant select, insert, update, delete on public.ed_people, public.ed_vendors, public.ed_contacts, public.ed_equipment,
@@ -838,12 +848,12 @@ grant select, insert, update, delete on public.ed_people, public.ed_vendors, pub
 revoke all on function public.ed_is_member(uuid), public.ed_is_owner(uuid), public.ed_can_event(uuid), public.ed_same_org(uuid, text, uuid),
   public.ed_create_org(text, text), public.ed_create_invite(uuid), public.ed_accept_invite(text, text), public.ed_remove_member(uuid, uuid),
   public.ed_renew_event(uuid, date, date, jsonb), public.ed_copy_event(uuid, text, date),
-  public.ed_public(text), public.ed_sign(text, uuid, text, text, text, text, int), public.ed_unsign(text), public.ed_mine(text[]),
+  public.ed_public(text), public.ed_sign(text, uuid, text, text, text, text, int, boolean), public.ed_unsign(text), public.ed_mine(text[]),
   public.ed_connect(text, text, text, text, text[], text), public.ed_checkin(text, text) from public;
 grant execute on function public.ed_is_member(uuid), public.ed_is_owner(uuid), public.ed_can_event(uuid), public.ed_same_org(uuid, text, uuid),
   public.ed_create_org(text, text), public.ed_create_invite(uuid), public.ed_accept_invite(text, text), public.ed_remove_member(uuid, uuid),
   public.ed_renew_event(uuid, date, date, jsonb), public.ed_copy_event(uuid, text, date) to authenticated;
-grant execute on function public.ed_public(text), public.ed_sign(text, uuid, text, text, text, text, int), public.ed_unsign(text),
+grant execute on function public.ed_public(text), public.ed_sign(text, uuid, text, text, text, text, int, boolean), public.ed_unsign(text),
   public.ed_mine(text[]), public.ed_connect(text, text, text, text, text[], text), public.ed_checkin(text, text) to anon, authenticated;
 
 -- ============================================================ version 9: prayer
@@ -873,3 +883,94 @@ drop policy if exists ed_prayer_all on public.ed_prayer;
 create policy ed_prayer_all on public.ed_prayer for all to authenticated using (public.ed_can_event(event_id))
   with check (public.ed_can_event(event_id) and (person_id is null or public.ed_same_org(event_id, 'ed_people', person_id)));
 grant select, insert, update, delete on public.ed_prayer to authenticated;
+
+-- ============================================================ version 16: bulk email
+-- A mailing is one designed email (invite, reminder, thank-you) for an event. Its recipients are
+-- listed one per row, so each person gets their own RSVP link and unsubscribe link, and nobody is emailed twice.
+create table if not exists public.ed_mailings (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.ed_orgs (id) on delete cascade,
+  event_id uuid references public.ed_events (id) on delete cascade,
+  template text not null default 'invite' check (length(template) <= 40),
+  subject text not null default '' check (length(subject) <= 200),
+  fields jsonb not null default '{}'::jsonb check (jsonb_typeof(fields) = 'object' and pg_column_size(fields) < 20000),
+  html text not null default '' check (length(html) <= 200000),
+  audience text not null default '' check (length(audience) <= 200),
+  base_url text not null default '' check (length(base_url) <= 300),
+  status text not null default 'draft' check (status in ('draft', 'sending', 'sent')),
+  sent_at timestamptz,
+  created_by text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists ed_mailings_org_idx on public.ed_mailings (org_id);
+create table if not exists public.ed_mail_rcpt (
+  id uuid primary key default gen_random_uuid(),
+  mailing_id uuid not null references public.ed_mailings (id) on delete cascade,
+  org_id uuid not null references public.ed_orgs (id) on delete cascade,
+  email text not null check (length(email) between 3 and 200),
+  name text not null default '' check (length(name) <= 120),
+  phone text not null default '' check (length(phone) <= 40),
+  status text not null default 'queued' check (status in ('queued', 'sent', 'failed', 'skipped')),
+  error text not null default '',
+  sent_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (mailing_id, email)
+);
+create index if not exists ed_mail_rcpt_mailing_idx on public.ed_mail_rcpt (mailing_id);
+create table if not exists public.ed_unsub (
+  org_id uuid not null references public.ed_orgs (id) on delete cascade,
+  email text not null check (length(email) between 3 and 200),
+  created_at timestamptz not null default now(),
+  primary key (org_id, email)
+);
+drop trigger if exists ed_mailings_touch on public.ed_mailings;
+create trigger ed_mailings_touch before update on public.ed_mailings for each row execute function public.ed_touch();
+alter table public.ed_mailings enable row level security;
+alter table public.ed_mail_rcpt enable row level security;
+alter table public.ed_unsub enable row level security;
+revoke all on public.ed_mailings, public.ed_mail_rcpt, public.ed_unsub from anon;
+drop policy if exists ed_mailings_all on public.ed_mailings;
+create policy ed_mailings_all on public.ed_mailings for all to authenticated using (public.ed_is_member(org_id))
+  with check (public.ed_is_member(org_id) and (event_id is null or public.ed_can_event(event_id)));
+drop policy if exists ed_mail_rcpt_all on public.ed_mail_rcpt;
+create policy ed_mail_rcpt_all on public.ed_mail_rcpt for all to authenticated using (public.ed_is_member(org_id))
+  with check (public.ed_is_member(org_id) and exists (select 1 from public.ed_mailings m where m.id = mailing_id and m.org_id = ed_mail_rcpt.org_id));
+drop policy if exists ed_unsub_read on public.ed_unsub;
+create policy ed_unsub_read on public.ed_unsub for select to authenticated using (public.ed_is_member(org_id));
+grant select, insert, update, delete on public.ed_mailings, public.ed_mail_rcpt to authenticated;
+grant select on public.ed_unsub to authenticated;
+
+-- The link in an email knows who it was sent to, so the RSVP form can be filled in for them.
+create or replace function public.ed_guest(p_rcpt uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('name', r.name, 'email', r.email, 'phone', r.phone) from public.ed_mail_rcpt r where r.id = p_rcpt;
+$$;
+-- "Unsubscribe" in an email: no more bulk email from that ministry to that address.
+create or replace function public.ed_unsubscribe(p_rcpt uuid) returns text
+language plpgsql security definer set search_path = public as $$
+declare r public.ed_mail_rcpt; nm text;
+begin
+  select * into r from public.ed_mail_rcpt where id = p_rcpt;
+  if r.id is null then return ''; end if;
+  insert into public.ed_unsub (org_id, email) values (r.org_id, lower(r.email)) on conflict do nothing;
+  update public.ed_people set no_email = true where org_id = r.org_id and lower(email) = lower(r.email);
+  select name into nm from public.ed_orgs where id = r.org_id;
+  return coalesce(nm, '');
+end $$;
+revoke all on function public.ed_guest(uuid), public.ed_unsubscribe(uuid) from public;
+grant execute on function public.ed_guest(uuid), public.ed_unsubscribe(uuid) to anon, authenticated;
+
+-- Photos and logos used in emails live in a public storage folder, one folder per ministry.
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema = 'storage' and table_name = 'buckets') then
+    insert into storage.buckets (id, name, public) values ('ed-mail', 'ed-mail', true) on conflict (id) do nothing;
+    drop policy if exists ed_mail_upload on storage.objects;
+    create policy ed_mail_upload on storage.objects for insert to authenticated
+      with check (bucket_id = 'ed-mail' and exists (select 1 from public.ed_members m where m.user_id = auth.uid() and m.org_id::text = (storage.foldername(name))[1]));
+    drop policy if exists ed_mail_replace on storage.objects;
+    create policy ed_mail_replace on storage.objects for update to authenticated
+      using (bucket_id = 'ed-mail' and exists (select 1 from public.ed_members m where m.user_id = auth.uid() and m.org_id::text = (storage.foldername(name))[1]));
+  end if;
+end $$;
