@@ -67,7 +67,18 @@ function CloudDB() {
       var chunks = []; for (var i = 0; i < vals.length; i += 100) chunks.push(vals.slice(i, i + 100));
       return Promise.all(chunks.map(function (c) { return q(sb.from(t).select('*').in(col, c)); })).then(function (r) { return [].concat.apply([], r); });
     },
-    save: function (t, row) { var r = clean(row); if (!r.id) r.id = uuid(); if (t === 'ed_signups') delete r.token; return q(sb.from(t).upsert(r).select().single()); },
+    save: function (t, row) {
+      var r = clean(row); if (!r.id) r.id = uuid(); if (t === 'ed_signups') delete r.token;
+      // If the app ever sends a field this table doesn't have, drop that one field and save the rest instead of failing.
+      var go = function (left) {
+        return sb.from(t).upsert(r).select().single().then(function (res) {
+          var m = res.error && /Could not find the '([a-z_0-9]+)' column/i.exec(res.error.message || '');
+          if (m && left > 0 && m[1] !== 'id' && (m[1] in r)) { delete r[m[1]]; return go(left - 1); }
+          if (res.error) throw res.error; return res.data;
+        });
+      };
+      return go(4);
+    },
     remove: function (t, id) { return q(sb.from(t).delete().eq('id', id)); },
     rpc: function (name, args) { return q(sb.rpc(name, args)); }
   };

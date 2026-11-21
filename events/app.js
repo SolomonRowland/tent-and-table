@@ -43,8 +43,8 @@ function errMsg(e) {
   if (/password should be|weak password/i.test(m)) return 'Use a password with at least 8 characters.';
   if (/email not confirmed/i.test(m)) return 'Confirm your email first, then sign in.';
   if (/failed to fetch|network|load failed/i.test(m)) return 'Can’t connect right now. Check your connection and try again.';
-  if (/column/i.test(m) && /schema cache/i.test(m)) return 'The app tried to save a field the database doesn’t have. Please send a screenshot of this to whoever set up the app. (' + m + ')';
-  if (/does not exist|schema cache/i.test(m)) return 'The database isn’t set up yet. Run events/supabase/schema.sql in Supabase.';
+  if (/column/i.test(m) && /schema cache/i.test(m)) return 'That didn’t save because the app and its database are out of step. Send a screenshot of this to whoever set up Tent & Table. (' + m + ')';
+  if (/does not exist|schema cache/i.test(m)) return 'The database needs an update before this will work. Whoever set up Tent & Table can fix it by running the latest schema.sql in Supabase.';
   if (/duplicate key|unique/i.test(m)) return 'That’s already been added.';
   return m || 'Something went wrong. Try again.';
 }
@@ -193,7 +193,8 @@ function peopleNames() { var s = {}; memberNames().concat(T('ed_people').filter(
 function events() { return T('ed_events').slice(); }
 
 var toastT = 0;
-function toast(m) { S.toast = m; renderLayer(); clearTimeout(toastT); toastT = setTimeout(function () { S.toast = ''; renderLayer(); }, 2600); }
+function buzz(n) { try { if (navigator.vibrate) navigator.vibrate(n || 8); } catch (e) {} }
+function toast(m) { S.toast = m; buzz(); renderLayer(); clearTimeout(toastT); toastT = setTimeout(function () { S.toast = ''; renderLayer(); }, 2600); }
 function busy(p, okMsg) {
   S.busy = true; renderLayer();
   return Promise.resolve(p).then(function (v) { S.busy = false; if (okMsg) toast(okMsg); renderLayer(); return v; },
@@ -285,12 +286,18 @@ function openPub(kind, slug) {
 function render() {
   var h;
   if (S.pubMode) h = S.pubMode === 'c' ? viewCard() : S.pubMode === 'k' ? viewSelfCheckin() : viewPublic();
-  else if (S.loading) h = '<div class="auth"><div class="logo">' + IC.tent + '</div><p class="muted">Loading…</p></div>';
+  else if (S.loading) h = '<div class="auth loading" role="status"><div class="logo">' + IC.tent + '</div><p class="muted">Loading your ministry…</p></div>';
   else if (!S.user) h = viewAuth();
   else if (!S.acct) h = viewSetup();
   else if (S.ev) h = viewWorkspace();
   else h = viewShell();
   $('#app').innerHTML = offlineBar() + h;
+  if (S.formKeep) {
+    var kf = $('#app form[data-form="' + S.formKeep.k + '"]'), kv = S.formKeep.v;
+    if (!kf) S.formKeep = null;
+    else Object.keys(kv).forEach(function (name) { kf.querySelectorAll('[name="' + name + '"]').forEach(function (el) {
+      if (el.type === 'checkbox' || el.type === 'radio') el.checked = [].concat(kv[name]).indexOf(el.value) >= 0; else if (!el.value && name !== 'code') el.value = kv[name]; }); });
+  }
   document.body.classList.toggle('has-nav', !!(S.user && S.acct && !S.pubMode));
   document.body.classList.toggle('in-ev', !!(S.user && S.acct && S.ev && !S.pubMode));
   renderLayer();
@@ -298,20 +305,24 @@ function render() {
 function renderLayer() {
   var layer = $('#layer'), sh = layer.querySelector('.sheet');
   if (S.sheet && sh && S.sheet.drawn) {
-    sh.querySelectorAll('[data-save]').forEach(function (b) { b.disabled = S.busy; });
+    sh.querySelectorAll('[data-save]').forEach(function (b) { b.disabled = S.busy; b.classList.toggle('saving', !!S.busy); });
   } else {
     layer.querySelectorAll('.scrim').forEach(function (x) { x.remove(); });
     if (S.sheet) {
       layer.insertAdjacentHTML('afterbegin', '<div class="scrim" data-a="scrim"><div class="sheet" role="dialog" aria-modal="true">' + S.sheet.html() + '<div class="err" hidden></div></div></div>');
-      S.sheet.drawn = true; var f = layer.querySelector('[autofocus]'); if (f && window.innerWidth > 700) f.focus();
+      S.sheet.drawn = true; var dlg = layer.querySelector('.sheet'), f = layer.querySelector('[autofocus]'); dlg.tabIndex = -1; if (f && window.innerWidth > 700) f.focus(); else { try { dlg.focus({ preventScroll: true }); } catch (e) {} }
       if (S.sheet.after) S.sheet.after(layer.querySelector('.sheet'));
       refreshSheetErr();
     }
   }
-  var t = layer.querySelector('.toast'); if (t) t.remove();
-  if (S.toast) layer.insertAdjacentHTML('beforeend', '<div class="toast" role="status">' + esc(S.toast) + '</div>');
+  var dl = layer.querySelector('.sheet'), dh = dl && dl.querySelector('h3'); if (dh) dl.setAttribute('aria-label', dh.textContent);
+  document.documentElement.classList.toggle('has-sheet', !!S.sheet);
+  var appEl = $('#app'); if (appEl && 'inert' in appEl) appEl.inert = !!S.sheet; // screen readers and the Tab key stay inside the open form
+  var t = layer.querySelector('.toast');
+  if (t && t.textContent !== S.toast) { t.remove(); t = null; }
+  if (S.toast && !t) layer.insertAdjacentHTML('beforeend', '<div class="toast" role="status">' + esc(S.toast) + '</div>');
 }
-function refreshSheetErr() { var e = $('#layer .sheet .err'); if (!e || !S.sheet) return; e.hidden = !S.sheet.err; e.textContent = S.sheet.err || ''; }
+function refreshSheetErr() { var e = $('#layer .sheet .err'); if (!e || !S.sheet) return; var was = e.hidden; e.hidden = !S.sheet.err; e.textContent = S.sheet.err || ''; if (S.sheet.err) { e.setAttribute('role', 'alert'); if (was && e.scrollIntoView) e.scrollIntoView({ block: 'nearest' }); } }
 function openSheet(html, onSave, extra) { S.sheet = Object.assign({ html: typeof html === 'function' ? html : function () { return html; }, save: onSave, err: '' }, extra || {}); renderLayer(); }
 function closeSheet() { S.sheet = null; renderLayer(); }
 function redrawSheet() { if (!S.sheet) return; var sh = $('#layer .sheet'); if (sh && S.sheet.drawn) { sh.innerHTML = S.sheet.html() + '<div class="err" hidden></div>'; if (S.sheet.after) S.sheet.after(sh); refreshSheetErr(); } else { S.sheet.drawn = false; renderLayer(); } }
@@ -572,16 +583,16 @@ function viewAuth() {
     return intro + '<form data-form="auth-phone" class="fgrid">' +
       (sent ? '<div class="fld"><p class="small" style="margin:0">We texted a 6-digit code to <b>' + esc(prettyPhone(S.otpPhone)) + '</b>.</p></div><div class="fld"><label for="a_code">Code</label><input class="inp otp" id="a_code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="8" required autofocus></div>'
         : '<div class="fld"><label for="a_phone">Your Mobile Number</label><input class="inp" id="a_phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(555) 555-0123" required autofocus></div>') +
-      '<div class="fld"><button class="btn block" type="submit"' + (S.busy ? ' disabled' : '') + '>' + (sent ? 'Sign In' : 'Text Me A Code') + '</button></div></form>' +
+      '<div class="fld"><button class="btn block' + (S.busy ? ' saving' : '') + '" type="submit"' + (S.busy ? ' disabled' : '') + '>' + (sent ? 'Sign In' : 'Text Me A Code') + '</button></div></form>' +
       (sent ? '<p class="small muted"><a href="#" data-a="otp-resend">Send it again</a> · <a href="#" data-a="otp-change">Use a different number</a></p>' : '<p class="small muted">New or returning, it’s the same: we text you a code and you’re in. Message and data rates may apply.</p>') +
       (S.authMsg ? '<div class="err">' + esc(S.authMsg) + '</div>' : '') +
       '<p class="small muted" style="margin-top:16px"><a href="#" data-a="auth-via" data-v="email">Use email and a password instead</a></p>' + demo;
   }
   return intro +
     '<form data-form="auth" class="fgrid">' +
-    '<div class="fld"><label for="a_email">Email</label><input class="inp" id="a_email" name="email" type="email" autocomplete="email" required></div>' +
-    (reset ? '' : '<div class="fld"><label for="a_pw">Password</label><input class="inp" id="a_pw" name="pw" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" minlength="8" required></div>') +
-    '<div class="fld"><button class="btn block" type="submit"' + (S.busy ? ' disabled' : '') + '>' + (reset ? 'Send Reset Link' : up ? 'Create Account' : 'Sign In') + '</button></div></form>' +
+    '<div class="fld"><label for="a_email">Email</label><input class="inp" id="a_email" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" inputmode="email" enterkeyhint="next" required></div>' +
+    (reset ? '' : '<div class="fld"><label for="a_pw">Password</label><input class="inp" id="a_pw" name="pw" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" minlength="8" enterkeyhint="go" required>' + (up ? '<span class="hint">At least 8 characters.</span>' : '') + '</div>') +
+    '<div class="fld"><button class="btn block' + (S.busy ? ' saving' : '') + '" type="submit"' + (S.busy ? ' disabled' : '') + '>' + (reset ? 'Send Reset Link' : up ? 'Create Account' : 'Sign In') + '</button></div></form>' +
     (up ? '<p class="small muted">Each login belongs to one ministry. If you serve with two ministries, use a different email for each.</p>' : '') +
     (S.authMsg ? '<div class="err">' + esc(S.authMsg) + '</div>' : '') +
     '<p class="small muted" style="margin-top:16px">' + (up ? 'Already have an account? <a href="#" data-a="auth-mode" data-v="in">Sign In</a>' : 'New here? <a href="#" data-a="auth-mode" data-v="up">Create An Account</a> · <a href="#" data-a="auth-mode" data-v="reset">Forgot Password</a>') + '</p>' + (TEXT_SIGNIN ? '<p class="small muted"><a href="#" data-a="auth-via" data-v="phone">Sign in with a text code instead</a></p>' : '') +
@@ -1950,7 +1961,7 @@ function viewSelfCheckin() {
   if (done) return '<main class="pub">' + pubHero() + '<div class="card thanks"><span class="okmark">' + IC.check + '</span><h2>You’re Checked In</h2><p class="lead">' + esc(done.map(function (d) { return d.name + ' · ' + d.title; }).join('\n')) + '</p><p class="small muted">Thank you for being here.</p><button class="btn ghost" data-a="ci-again">Check In Someone Else</button></div>' + backLink() + '</main>';
   return '<main class="pub">' + pubHero('<p class="lead">Welcome! Check yourself in with the phone number you used to sign up or RSVP.</p>') +
     '<form data-form="selfci" class="fgrid"><div class="fld"><label for="ci_phone">Your Phone Number</label><input class="inp" id="ci_phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="(555) 555-0123"></div>' +
-    '<div class="fld"><button class="btn block" type="submit"' + (S.busy ? ' disabled' : '') + '>Check Me In</button></div></form>' +
+    '<div class="fld"><button class="btn block' + (S.busy ? ' saving' : '') + '" type="submit"' + (S.busy ? ' disabled' : '') + '>Check Me In</button></div></form>' +
     (S.cardErr ? '<div class="err">' + esc(S.cardErr) + '</div>' : '') + backLink() + '</main>';
 }
 function viewCard() {
@@ -1965,7 +1976,7 @@ function viewCard() {
     '<div class="fld half"><label for="c_email">Email</label><input class="inp" id="c_email" name="email" type="email" autocomplete="email"></div>' +
     '<fieldset class="fld"><legend>Today…</legend><div class="multi one">' + RESPONSES.map(function (r, i) { return '<label class="cbx"><input type="checkbox" id="c_r' + i + '" name="r" value="' + esc(r) + '"><span>' + esc(r) + '</span></label>'; }).join('') + '</div></fieldset>' +
     '<div class="fld"><label for="c_pr">How Can We Pray For You?</label><textarea class="inp" id="c_pr" name="prayer"></textarea></div>' +
-    '<div class="fld"><button class="btn block" type="submit"' + (S.busy ? ' disabled' : '') + '>Send My Card</button></div></form>' +
+    '<div class="fld"><button class="btn block' + (S.busy ? ' saving' : '') + '" type="submit"' + (S.busy ? ' disabled' : '') + '>Send My Card</button></div></form>' +
     (S.cardErr ? '<div class="err">' + esc(S.cardErr) + '</div>' : '') +
     (pubOn('volunteers') || pubOn('food') ? '<p><a href="#" data-a="pub-go" data-id="v" class="small">Want to serve or bring food? Sign up here.</a></p>' : '') + backLink() + '</main>';
 }
@@ -2267,7 +2278,7 @@ document.addEventListener('change', function (ev) {
 });
 function toggle(t, id, field, valFn) {
   var r = byId(t, id), v = Object.assign({}, r); v[field] = valFn ? valFn(r) : !r[field];
-  put(t, v); render(); DB.save(t, v).then(function (x) { put(t, x); }, function (e) { put(t, r); render(); toast(errMsg(e)); });
+  put(t, v); render(); buzz(); DB.save(t, v).then(function (x) { put(t, x); }, function (e) { put(t, r); render(); toast(errMsg(e)); });
 }
 var A = {
   close: closeSheet,
@@ -2440,6 +2451,7 @@ var A = {
 document.addEventListener('submit', function (ev) {
   var f = ev.target, k = f.getAttribute('data-form'); if (!k) return; ev.preventDefault();
   var v = {}; new FormData(f).forEach(function (val, key) { if (key === 'r') (v.r = v.r || []).push(val); else v[key] = String(val).trim(); });
+  S.formKeep = { k: k, v: Object.assign({}, v) }; // so a redraw (an error, a busy state) never erases what someone typed
   if (k === 'auth') {
     S.authMsg = ''; S.busy = true; render();
     var p = S.authMode === 'reset' ? DB.resetPassword(v.email).then(function () { S.authMsg = 'Check your email for a reset link.'; S.authMode = 'in'; })
@@ -2469,12 +2481,37 @@ document.addEventListener('submit', function (ev) {
   } else if (k === 'card') {
     S.cardErr = '';
     if (!v.phone && !v.email) { S.cardErr = 'Add a phone number or email so we can reach you.'; render(); return; }
-    S.busy = true;
+    S.busy = true; render();
     DB.rpc('ed_connect', { p_slug: S.pubSlug, p_name: v.name, p_phone: v.phone, p_email: v.email, p_responses: v.r || [], p_prayer: v.prayer }).then(function () { S.busy = false; S.cardDone = true; render(); window.scrollTo(0, 0); }, function (e) { S.busy = false; S.cardErr = errMsg(e); render(); });
   }
 });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.sheet) closeSheet(); });
-document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && S.ev) refreshEvent(); });
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Tab' || !S.sheet) return; var sh = $('#layer .sheet'); if (!sh) return;
+  var f = sh.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled])'); if (!f.length) return;
+  var first = f[0], last = f[f.length - 1], cur = document.activeElement;
+  if (e.shiftKey && (cur === first || cur === sh)) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
+  else if (!sh.contains(cur)) { e.preventDefault(); first.focus(); }
+});
+var lastSync = Date.now();
+function resync() {
+  // Someone else may have changed things while this phone was asleep: reload quietly, but never under a form someone is filling in.
+  if (!DB || DB.mode !== 'cloud' || !S.acct || S.offline || S.sheet || S.busy || S.pubMode || Date.now() - lastSync < 45000) return false;
+  var el = document.activeElement; if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return false;
+  lastSync = Date.now(); var evId = S.ev && S.ev.id;
+  loadAll().then(function () { if (evId) S.ev = byId('ed_events', evId) || null; saveSnap(); if (!S.sheet) render(); }).catch(function () {});
+  return true;
+}
+document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && !resync() && S.ev) refreshEvent(); });
+if (window.visualViewport) {
+  var kbSet = function () { var v = window.visualViewport, kb = Math.round(window.innerHeight - v.height - v.offsetTop); document.documentElement.style.setProperty('--kb', (kb > 80 ? kb : 0) + 'px'); };
+  window.visualViewport.addEventListener('resize', kbSet); window.visualViewport.addEventListener('scroll', kbSet);
+}
+document.addEventListener('focusin', function (e) {
+  var el = e.target; if (!el || !el.closest || !el.closest('.sheet') || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+  setTimeout(function () { if (document.activeElement === el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 320);
+});
 
 (function start() {
   var DEMO = !!window.ED_DEMO || /[?&]demo\b/.test(location.search) || lget('ed.mode') === 'demo' || !window.supabase;
