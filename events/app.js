@@ -703,7 +703,7 @@ function viewAuth() {
   }
   return intro +
     '<form data-form="auth" class="fgrid">' +
-    '<div class="fld"><label for="a_email">Email</label><input class="inp" id="a_email" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" inputmode="email" enterkeyhint="next" required></div>' +
+    '<div class="fld"><label for="a_email">Email</label><input class="inp" id="a_email" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email" enterkeyhint="next" required></div>' +
     (reset ? '' : '<div class="fld"><label for="a_pw">Password</label><input class="inp" id="a_pw" name="pw" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" minlength="8" enterkeyhint="go" required>' + (up ? '<span class="hint">At least 8 characters.</span>' : '') + '</div>') +
     '<div class="fld"><button class="btn block' + (S.busy ? ' saving' : '') + '" type="submit"' + (S.busy ? ' disabled' : '') + '>' + (reset ? 'Send Reset Link' : up ? 'Create Account' : 'Sign In') + '</button></div></form>' +
     (up ? '<p class="small muted">Each login belongs to one ministry. If you serve with two ministries, use a different email for each.</p>' : '') +
