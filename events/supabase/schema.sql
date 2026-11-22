@@ -1,4 +1,4 @@
--- Tent & Table database (version 17).
+-- Tent & Table database (version 18).
 -- Paste this whole file into Supabase: SQL Editor -> New query -> Run.
 -- It is safe to run more than once. Every table starts with "ed_", so it can
 -- share a Supabase project with Tend Home without touching Tend's data.
@@ -423,7 +423,12 @@ create table if not exists public.ed_cards (
 );
 create index if not exists ed_cards_event_idx on public.ed_cards (event_id);
 
--- Upgrades from versions 12 to 17 (they come after every table above exists).
+-- Upgrades from versions 12 to 18 (they come after every table above exists).
+-- version 18: details that depend on the contact type (speaker bio and travel, volunteer shirt size, guest church home...)
+alter table public.ed_people add column if not exists info jsonb not null default '{}'::jsonb;
+alter table public.ed_people drop constraint if exists ed_people_info_check;
+alter table public.ed_people add constraint ed_people_info_check check (jsonb_typeof(info) = 'object' and length(info::text) <= 20000);
+
 -- version 17: an event's overall start and end time, and its sessions (each with a day, a start and an end)
 alter table public.ed_events add column if not exists start_time time;
 alter table public.ed_events add column if not exists end_time time;

@@ -58,6 +58,7 @@ var IC = {
   tent: '<svg width="20" height="20" viewBox="100 80 312 316" fill="currentColor" aria-hidden="true"><path d="M252 84C262 128 300 164 398 180L388 190C390 250 396 316 404 390H390C378 318 364 254 354 214Q256 232 158 214C148 254 134 318 122 390H108C116 316 122 250 124 190L114 180C206 164 242 128 252 84Z"/><path d="M178 290H334L340 304H172Z"/><rect x="184" y="302" width="11" height="70" rx="5"/><rect x="317" y="302" width="11" height="70" rx="5"/><rect x="214" y="302" width="9" height="50" rx="4" opacity=".75"/><rect x="289" y="302" width="9" height="50" rx="4" opacity=".75"/></svg>',
   cal: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
   book: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V3H6.5A2.5 2.5 0 004 5.5v14z"/><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-5"/></svg>',
+  mic: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v4M8 22h8"/></svg>',
   user: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
   phone: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3.1 19.5 19.5 0 01-6-6A19.8 19.8 0 012.1 4.2 2 2 0 014.1 2h3a2 2 0 012 1.7c.1 1 .4 1.9.7 2.8a2 2 0 01-.5 2.1L8 9.9a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.8.6 2.8.7a2 2 0 011.7 2z"/></svg>',
   text: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
@@ -82,15 +83,16 @@ var IC = {
 
 /* ================================================================ vocab */
 var GROUPS = ['Team Member', 'Board', 'Worship', 'Speaker', 'Prayer Team', 'Volunteer', 'Guest'];
-var TEAM_GROUPS = ['Team Member', 'Board', 'Worship', 'Speaker', 'Prayer Team'];
+var TEAM_GROUPS = ['Team Member', 'Board', 'Worship', 'Prayer Team'];
 // Every person or business is a contact, and every contact has one of these types, inside an event and out.
-var CTYPES = [['team', 'Team', 'Team'], ['volunteer', 'Volunteers', 'Volunteer'], ['guest', 'Guests', 'Guest'], ['vendor', 'Vendors', 'Vendor'], ['other', 'Other', 'Other']];
-var CTYPE_HINT = { team: 'Leaders, board, staff, worship, speakers, prayer team.', volunteer: 'People who serve at your events.', guest: 'People who attend: RSVPs and connection cards.', vendor: 'Businesses you hire: tent, sound, food, printing.', other: 'Landowners, permit offices, partner churches, officials.' };
-var CTYPE_TONE = { team: 'red', volunteer: 'green', guest: 'blue', vendor: 'amber', other: 'slate' };
+var CTYPES = [['team', 'Team', 'Team'], ['speaker', 'Speakers', 'Speaker'], ['volunteer', 'Volunteers', 'Volunteer'], ['guest', 'Guests', 'Guest'], ['vendor', 'Vendors', 'Vendor'], ['other', 'Other', 'Other']];
+var CTYPE_HINT = { team: 'Leaders, staff, board, worship team, prayer team.', speaker: 'Preachers and guest speakers: ministry, bio, travel and honorarium.', volunteer: 'People who serve at your events.', guest: 'People who attend: RSVPs and connection cards.', vendor: 'Businesses you hire: tent, sound, food, printing.', other: 'Landowners, permit offices, partner churches, officials.' };
+var CTYPE_TONE = { speaker: 'plum', team: 'red', volunteer: 'green', guest: 'blue', vendor: 'amber', other: 'slate' };
 function ctypeOne(k) { return (CTYPES.find(function (c) { return c[0] === k; }) || [, , 'Other'])[2]; }
 function personTypes(p) {
   var g = p.groups || [], out = [];
   if (g.some(function (x) { return TEAM_GROUPS.indexOf(x) >= 0; })) out.push('team');
+  if (g.indexOf('Speaker') >= 0) out.push('speaker');
   if (g.indexOf('Volunteer') >= 0) out.push('volunteer');
   if (g.indexOf('Guest') >= 0) out.push('guest');
   return out.length ? out : ['other'];
@@ -206,7 +208,10 @@ function boot() {
   var m = /[?&]join=([A-Za-z0-9]+)/.exec(location.search);
   if (m) { lset('ed.join', m[1]); try { history.replaceState(null, '', location.pathname); } catch (e) {} }
   if (/^#\/(e|c|v|r|k|u)\//.test(location.hash || '')) { route(); return; }
-  DB.user().then(function (u) { S.user = u; if (!u) { S.loading = false; render(); return; } return loadAcct(); })
+  // Coming back from Google: the session (or an error) arrives in the address. Read it, then tidy the address.
+  var back = /^#(access_token|error)=/.test(location.hash || ''), berr = /error_description=([^&]+)/.exec(location.hash || '');
+  if (berr) S.authMsg = decodeURIComponent(berr[1].replace(/\+/g, ' '));
+  DB.user().then(function (u) { if (back) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} } S.user = u; if (!u) { S.loading = false; render(); return; } return loadAcct(); })
     .catch(function (e) { if (useSnap(lget('ed.snap.last'))) { render(); return; } S.loading = false; S.authMsg = errMsg(e); render(); });
 }
 function loadAcct() {
@@ -499,7 +504,8 @@ function recView(fields, data, skip) {
 /* Edit any row with a field list. opts: title, sub, top (html above the form), required, prep(row) -> row, after(saved), view (open saved records as a summary) */
 function editRow(t, rec, fields, opts) {
   opts = opts || {};
-  var base = rec || opts.base || {}, newId = rec ? null : uuid(), canView = !!(rec && opts.view);
+  var base = rec || opts.base || {}, newId = rec ? null : uuid(), canView = !!(rec && opts.view), fieldFn = typeof fields === 'function' ? fields : null;
+  if (fieldFn) fields = fieldFn(base);
   openSheet(function () {
     var head = '<h3>' + esc(opts.title || (rec ? 'Edit' : 'Add')) + '</h3>' + (opts.sub ? '<p class="lead">' + esc(opts.sub) + '</p>' : '') + (opts.top ? opts.top(base) : '');
     if (S.sheet && S.sheet.viewMode) return head + recView(fields, base, opts.viewSkip) + '<div class="acts"><span class="grow"></span><button class="btn plain" data-a="close">Done</button><button class="btn" data-a="rec-edit">Edit</button></div>';
@@ -518,7 +524,7 @@ function editRow(t, rec, fields, opts) {
       if (canView && !opts.after && S.sheet === sh) { rec = base = r; sh.viewMode = true; redrawSheet(); render(); var el = $('#layer .sheet'); if (el) el.scrollTop = 0; return; }
       closeSheet(); if (opts.after) opts.after(r); render();
     }).catch(function () {});
-  }, { viewMode: canView, del: rec ? function () { ask(opts.delMsg || 'Delete this?', 'Delete', function () { return remove(t, rec.id).then(function () { render(); }); }, opts.delSub); } : null, after: opts.afterDraw });
+  }, { viewMode: canView, reflow: fieldFn ? function () { base = readForm(fields, base); fields = fieldFn(base); redrawSheet(); } : null, del: rec ? function () { ask(opts.delMsg || 'Delete this?', 'Delete', function () { return remove(t, rec.id).then(function () { render(); }); }, opts.delSub); } : null, after: opts.afterDraw });
 }
 
 /* ================================================================ sessions (an event can have several gatherings, each with its own times) */
@@ -568,15 +574,52 @@ function travelTable(data) {
   }).join('') + '</div></div>';
 }
 
+/* ================================================================ contact fields by type */
+var SHIRTS = [['', 'Not set'], 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'].map(function (x) { return Array.isArray(x) ? x : [x, x]; });
+var TYPE_PICK = [['Team Member', 'Team Member'], ['Board', 'Board'], ['Worship', 'Worship Team'], ['Prayer Team', 'Prayer Team'], ['Speaker', 'Speaker'], ['Volunteer', 'Volunteer'], ['Guest', 'Guest']];
+function groupLabel(g) { return (TYPE_PICK.find(function (x) { return x[0] === g; }) || [g, g])[1]; }
+// The type sits at the top as one line. Change opens the checkboxes, and ticking one rebuilds the form for that type.
+function typeBlock(data) {
+  var g = (data && data.groups) || [], open = S.sheet && S.sheet.typeOpen, team = g.some(function (x) { return TEAM_GROUPS.indexOf(x) >= 0; });
+  var box = function (o) { return '<label class="cbx"><input type="checkbox" name="groups" value="' + esc(o[0]) + '"' + (g.indexOf(o[0]) >= 0 ? ' checked' : '') + '><span>' + esc(o[1]) + '</span></label>'; };
+  // a team member picks their team roles right here; other types stay tucked behind "Change"
+  if (!open && team) return '<div class="fld typeline"><label>Team Role</label><span class="hint">Pick all that fit.</span><div class="multi">' + TYPE_PICK.slice(0, 4).map(box).join('') + '</div>' +
+    g.filter(function (x) { return TEAM_GROUPS.indexOf(x) < 0; }).map(function (x) { return '<input type="checkbox" name="groups" value="' + esc(x) + '" checked hidden>'; }).join('') +
+    '<p class="small muted tl-also">' + (g.some(function (x) { return TEAM_GROUPS.indexOf(x) < 0; }) ? 'Also: ' + esc(g.filter(function (x) { return TEAM_GROUPS.indexOf(x) < 0; }).map(groupLabel).join(', ')) + '. ' : '') + '<button type="button" class="link" data-a="type-open">Also a speaker, volunteer or guest?</button></p></div>';
+  if (!open) return '<div class="fld typeline"><label>Contact Type</label><div class="tl-row"><span class="tl-v">' + (g.length ? esc(g.map(groupLabel).join(' · ')) : '<i>Not set</i>') + '</span><button type="button" class="link" data-a="type-open">Change</button></div>' +
+    g.map(function (x) { return '<input type="checkbox" name="groups" value="' + esc(x) + '" checked hidden>'; }).join('') + '</div>';
+  return '<div class="fld typeline open"><label>Contact Type</label><span class="hint">Pick all that fit. The form below changes to match.</span>' +
+    '<div class="tl-grp">Team</div><div class="multi">' + TYPE_PICK.slice(0, 4).map(box).join('') + '</div>' +
+    '<div class="tl-grp">Also</div><div class="multi">' + TYPE_PICK.slice(4).map(box).join('') + '</div></div>';
+}
+function typeView(data) { var g = (data && data.groups) || []; return g.length ? '<div class="rv-row"><dt>Contact Type</dt><dd>' + esc(g.map(groupLabel).join(', ')) + '</dd></div>' : ''; }
+function personFields(data) {
+  var g = (data && data.groups) || [], has = function (x) { return g.indexOf(x) >= 0; }, team = g.some(function (x) { return TEAM_GROUPS.indexOf(x) >= 0; });
+  var spk = has('Speaker'), vol = has('Volunteer'), gst = has('Guest');
+  var f = [{ k: 'name', label: 'Name', auto: true }, { html: typeBlock, view: typeView }, { k: 'groups', label: 'Contact Type', type: 'multi', opts: GROUPS, drawn: true }];
+  if (team || spk) f.push({ k: 'title', label: 'Title', type: 'list', opts: TITLES, half: true, ph: spk && !team ? 'Evangelist' : 'Worship Director' });
+  f.push({ k: 'status', label: 'Status', type: 'select', opts: [['current', 'Current'], ['previous', 'Previous']], half: true });
+  f.push({ k: 'phone', label: 'Phone', type: 'tel', half: true }, { k: 'email', label: 'Email', type: 'email', half: true });
+  if (spk) f.push({ html: function () { return '<div class="fsec">Speaker</div>'; } },
+    { k: 'info.ministry', label: 'Ministry Or Church', half: true, ph: 'Fire & Grace Ministries' }, { k: 'info.website', label: 'Website', type: 'url', half: true, ph: 'example.com' },
+    { k: 'info.home', label: 'Home City Or Airport', half: true, ph: 'Tulsa, OK (TUL)' }, { k: 'info.fee', label: 'Usual Honorarium', type: 'money', half: true },
+    { k: 'info.booking', label: 'Booking Contact', ph: 'Assistant’s name and phone' },
+    { k: 'info.travel_with', label: 'Usually Travels With', half: true, ph: 'Spouse, armor bearer' }, { k: 'info.diet', label: 'Food Needs Or Allergies', half: true, ph: 'No shellfish' },
+    { k: 'info.bio', label: 'Short Bio', type: 'textarea', ph: 'A few lines for flyers and introductions.' });
+  if (vol) f.push({ html: function () { return '<div class="fsec">Volunteer</div>'; } },
+    { k: 'info.serve', label: 'Likes To Serve', half: true, ph: 'Parking, kids, greeting' }, { k: 'info.shirt', label: 'Shirt Size', type: 'select', opts: SHIRTS, half: true },
+    { k: 'info.avail', label: 'Usually Available', half: true, ph: 'Weekends, evenings' }, { k: 'info.emergency', label: 'Emergency Contact', half: true, ph: 'Name and phone' });
+  if (team || vol) f.push({ k: 'bg_cleared_on', label: 'Background Check Cleared', type: 'date', half: true }, { k: 'bg_expires_on', label: 'Check Expires', type: 'date', half: true, hint: 'Leave blank and it’s good for 2 years.' });
+  if (gst) f.push({ html: function () { return '<div class="fsec">Guest</div>'; } },
+    { k: 'info.church', label: 'Church Home', half: true, ph: 'None yet' }, { k: 'info.heard', label: 'How They Heard About Us', half: true, ph: 'A friend, Facebook' },
+    { k: 'info.household', label: 'Household', ph: 'Spouse Maria, kids Ava (8) and Leo (5)' });
+  if (spk || vol || gst) f.push({ html: function () { return '<div class="fsec">Contact Details</div>'; } });
+  f.push({ k: 'address', label: 'Address' }, { k: 'notes', label: 'Notes', type: 'textarea', ph: spk ? 'Anything else to remember' : vol ? 'Skills, allergies, anything else' : 'Anything else to remember' });
+  return f;
+}
+
 /* ================================================================ field sets */
 var F = {
-  person: [
-    { k: 'name', label: 'Name', auto: true }, { k: 'title', label: 'Title', type: 'list', opts: TITLES, half: true, ph: 'Worship Director' },
-    { k: 'status', label: 'Status', type: 'select', opts: [['current', 'Current'], ['previous', 'Previous']], half: true },
-    { k: 'groups', label: 'Contact Type', type: 'multi', opts: GROUPS, hint: 'Pick all that fit. Board, worship, speakers, prayer team and staff all count as Team.' },
-    { k: 'phone', label: 'Phone', type: 'tel', half: true }, { k: 'email', label: 'Email', type: 'email', half: true },
-    { k: 'bg_cleared_on', label: 'Background Check Cleared', type: 'date', half: true }, { k: 'bg_expires_on', label: 'Check Expires', type: 'date', half: true, hint: 'Leave blank and it’s good for 2 years.' },
-    { k: 'address', label: 'Address' }, { k: 'notes', label: 'Notes', type: 'textarea', ph: 'Skills, shirt size, allergies…' }],
   vendor: [
     { k: 'name', label: 'Business Name', auto: true }, { k: 'category', label: 'Category', type: 'list', opts: VENDOR_CATS, half: true }, { k: 'contact_name', label: 'Contact Person', half: true, ph: 'Who you talk to' },
     { k: 'phone', label: 'Phone', type: 'tel', half: true }, { k: 'email', label: 'Email', type: 'email', half: true },
@@ -685,6 +728,8 @@ var F_ASSIGN = {
 // Sign in with a texted code needs Supabase phone sign-in turned on with Twilio (a paid service).
 // Off for now: people sign in with email and a password. Set to true once phone sign-in is set up.
 var TEXT_SIGNIN = false;
+// Turn on once Google is set up in Supabase (Authentication, Sign In / Providers, Google).
+var GOOGLE_SIGNIN = false;
 function viewAuth() {
   var up = S.authMode === 'up', reset = S.authMode === 'reset';
   var intro = '<div class="auth"><div class="logo">' + IC.tent + '</div><h1>Tent &amp; Table</h1>' +
@@ -702,6 +747,7 @@ function viewAuth() {
       '<p class="small muted" style="margin-top:16px"><a href="#" data-a="auth-via" data-v="email">Use email and a password instead</a></p>' + demo;
   }
   return intro +
+    (GOOGLE_SIGNIN && !reset ? '<button class="btn plain block gbtn" data-a="auth-google"' + (S.busy ? ' disabled' : '') + '><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.2l7.9 6.2C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.2C1 16.6 0 20.2 0 24s1 7.4 2.7 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.2C6.6 42.6 14.6 48 24 48z"/></svg>Continue With Google</button><div class="ordiv"><span>or use email</span></div>' : '') +
     '<form data-form="auth" class="fgrid">' +
     '<div class="fld"><label for="a_email">Email</label><input class="inp" id="a_email" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email" enterkeyhint="next" required></div>' +
     (reset ? '' : '<div class="fld"><label for="a_pw">Password</label><input class="inp" id="a_pw" name="pw" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" minlength="8" enterkeyhint="go" required>' + (up ? '<span class="hint">At least 8 characters.</span>' : '') + '</div>') +
@@ -797,7 +843,7 @@ function viewDirectory() {
     var cnt = function (k) { return every.filter(function (c) { return c.types.indexOf(k) >= 0; }).length; };
     tool += '<div class="filters"><select class="inp sm" data-change="dir-type" aria-label="Type"><option value="">All Contacts · ' + every.length + '</option>' + CTYPES.map(function (c) {
       return '<option value="' + c[0] + '"' + (ty === c[0] ? ' selected' : '') + '>' + c[1] + ' · ' + cnt(c[0]) + '</option>' + (c[0] === 'team' ? TEAM_GROUPS.map(function (g) {
-        return '<option value="g:' + g + '"' + (ty === 'g:' + g ? ' selected' : '') + '>&nbsp;&nbsp;– ' + esc({ Speaker: 'Speakers', 'Team Member': 'Staff And Team Members' }[g] || g) + '</option>'; }).join('') : '');
+        return '<option value="g:' + g + '"' + (ty === 'g:' + g ? ' selected' : '') + '>&nbsp;&nbsp;– ' + esc({ 'Team Member': 'Staff And Team Members', Worship: 'Worship Team' }[g] || g) + '</option>'; }).join('') : '');
     }).join('') + '</select>' +
       '<select class="inp sm" data-change="dir-status" aria-label="Status">' + [['current', 'Current'], ['previous', 'Previous'], ['all', 'Current And Previous']].map(function (o) { return '<option value="' + o[0] + '"' + (S.dirStatus === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div></div>';
     return h + tool + secHead(plural(list.length, 'Contact'), '<span class="hbtns"><label class="btn sm plain filebtn">Import<input type="file" accept=".csv,.vcf,.txt,text/csv,text/vcard" data-change="import-file" hidden></label>' + addBtn('Add Contact', 'contact-new', ty && !grp ? ty : '') + '</span>') +
@@ -916,7 +962,7 @@ function rowsFromVCF(text) {
   });
   return out;
 }
-function typeOf(s) { s = String(s || '').toLowerCase(); return /vendor|business|supplier/.test(s) ? 'vendor' : /volunteer/.test(s) ? 'volunteer' : /guest|visitor|attend/.test(s) ? 'guest' : /team|staff|board|leader|worship|speaker|prayer/.test(s) ? 'team' : /other|partner|official/.test(s) ? 'other' : ''; }
+function typeOf(s) { s = String(s || '').toLowerCase(); return /vendor|business|supplier/.test(s) ? 'vendor' : /volunteer/.test(s) ? 'volunteer' : /guest|visitor|attend/.test(s) ? 'guest' : /speaker|preacher|evangelist/.test(s) ? 'speaker' : /team|staff|board|leader|worship|prayer/.test(s) ? 'team' : /other|partner|official/.test(s) ? 'other' : ''; }
 function importFile(file) {
   var rd = new FileReader();
   rd.onload = function () {
@@ -946,20 +992,21 @@ function importSheet() {
       var ty = im.as === 'file' ? typeOf(r.type) || 'other' : im.as, base = { org_id: oid, phone: r.phone.slice(0, 40), email: r.email.slice(0, 120), address: r.address.slice(0, 300), notes: r.notes.slice(0, 2000) };
       if (ty === 'vendor') return ['ed_vendors', Object.assign(base, { name: (r.organization || r.name).slice(0, 120), contact_name: r.organization ? r.name.slice(0, 80) : '', category: '', website: '' })];
       if (ty === 'other') return ['ed_contacts', Object.assign(base, { name: r.name.slice(0, 120), organization: r.organization.slice(0, 120), role: r.title.slice(0, 80), website: '' })];
-      return ['ed_people', Object.assign(base, { name: r.name.slice(0, 120), title: r.title.slice(0, 80), status: 'current', groups: [{ team: 'Team Member', volunteer: 'Volunteer', guest: 'Guest' }[ty]] })];
+      return ['ed_people', Object.assign(base, { name: r.name.slice(0, 120), title: r.title.slice(0, 80), status: 'current', groups: [{ team: 'Team Member', speaker: 'Speaker', volunteer: 'Volunteer', guest: 'Guest' }[ty]] })];
     };
     return busy(fresh.reduce(function (p, r) { var x = rowFor(r); return p.then(function () { return DB.save(x[0], x[1]).then(function (saved) { put(x[0], saved); n++; }); }); }, Promise.resolve()), '').then(function () { closeSheet(); S.imp = null; toast('Imported ' + plural(n, 'contact')); render(); }).catch(function () { render(); });
   });
 }
+function newTitle(g) { g = g || []; return g.indexOf('Speaker') >= 0 ? 'Speaker' : g.indexOf('Volunteer') >= 0 ? 'Volunteer' : g.indexOf('Guest') >= 0 ? 'Guest' : g.length ? 'Team Member' : 'Contact'; }
 function newContact(type, after) {
-  S.newGroups = { team: ['Team Member'], volunteer: ['Volunteer'], guest: ['Guest'] }[type] || [];
+  S.newGroups = { team: ['Team Member'], speaker: ['Speaker'], volunteer: ['Volunteer'], guest: ['Guest'] }[type] || [];
   editDir(type === 'vendor' ? 'ed_vendors' : type === 'other' ? 'ed_contacts' : 'ed_people', null, after);
   S.newGroups = null;
 }
 var DIRFORM = { ed_people: ['person', 'Contact'], ed_vendors: ['vendor', 'Vendor'], ed_contacts: ['contact', 'Contact'], ed_equipment: ['equipment', 'Equipment'], ed_budget: ['budget', 'Budget Line'] };
 function editDir(t, rec, after) {
   var d = DIRFORM[t];
-  editRow(t, rec, F[d[0]], { title: rec ? rec.name || d[1] : 'Add ' + d[1], view: /^ed_(people|vendors|contacts)$/.test(t), viewSkip: 'name', top: rec && t !== 'ed_equipment' && t !== 'ed_budget' ? function (b) { return S.sheet && S.sheet.viewMode ? actions(b) : ''; } : null, base: rec ? null : t === 'ed_people' ? { org_id: org().id, status: 'current', groups: S.newGroups || [] } : { org_id: org().id },
+  editRow(t, rec, t === 'ed_people' ? personFields : F[d[0]], { title: rec ? rec.name || d[1] : 'Add ' + (t === 'ed_people' ? newTitle(S.newGroups) : d[1]), view: /^ed_(people|vendors|contacts)$/.test(t), viewSkip: 'name', top: rec && t !== 'ed_equipment' && t !== 'ed_budget' ? function (b) { return S.sheet && S.sheet.viewMode ? actions(b) : ''; } : null, base: rec ? null : t === 'ed_people' ? { org_id: org().id, status: 'current', groups: S.newGroups || [] } : { org_id: org().id },
     prep: function (v) { v.org_id = org().id; if (t === 'ed_budget' && !v.event_id) v.event_id = null; if (t === 'ed_equipment') v.quantity = Math.max(0, v.quantity || 0); return v; },
     after: after, delMsg: t === 'ed_equipment' ? 'Delete this from your equipment?' : t === 'ed_budget' ? 'Delete this budget line?' : 'Delete this contact?', delSub: rec && usedIn(t, rec.id).length ? 'It will also be removed from every event that uses it.' : '' });
 }
@@ -1994,7 +2041,7 @@ function pick(t, team) {
 function assignTable(t) { return { ed_people: 'ed_event_people', ed_vendors: 'ed_event_vendors', ed_contacts: 'ed_event_contacts', ed_equipment: 'ed_event_equipment' }[t]; }
 function assignRow(t, id, team, role) {
   var e = S.ev.id;
-  if (t === 'ed_people') { var p = byId('ed_people', id) || {}; return { event_id: e, person_id: id, team: team, role: role || (team === 'speaker' ? (p.title || 'Speaker') : p.title || ''), days: '', details: team === 'speaker' ? { status: 'Invited' } : {}, amount: 0, pay_status: 'Not Paid', payer: '', due_on: null, notes: '' }; }
+  if (t === 'ed_people') { var p = byId('ed_people', id) || {}; return { event_id: e, person_id: id, team: team, role: role || (team === 'speaker' ? (p.title || 'Speaker') : p.title || ''), days: '', details: team === 'speaker' || team === 'worship' ? Object.assign(team === 'speaker' ? { status: 'Invited' } : {}, (p.info || {}).diet ? { diet: p.info.diet } : {}, (p.info || {}).travel_with ? { party: p.info.travel_with } : {}) : {}, amount: team === 'speaker' ? num((p.info || {}).fee) : 0, pay_status: 'Not Paid', payer: '', due_on: null, notes: '' }; }
   if (t === 'ed_vendors') return { event_id: e, vendor_id: id, service: '', status: 'Quoted', arrival: '', cost: 0, paid: 0, pay_status: 'Not Paid', payer: '', due_on: null, notes: '' };
   if (t === 'ed_contacts') { var c = byId('ed_contacts', id) || {}; return { event_id: e, contact_id: id, role: c.role || '', notes: '' }; }
   return { event_id: e, equipment_id: id, quantity: 1, loaded: false, returned: false, notes: '' };
@@ -2380,6 +2427,9 @@ document.addEventListener('click', function (ev) {
   if (t.tagName === 'BUTTON' || t.getAttribute('href') === '#') ev.preventDefault();
   fn(t, id);
 });
+document.addEventListener('change', function (ev) {
+  var t = ev.target; if (t && t.name === 'groups' && S.sheet && S.sheet.reflow && t.closest('.typeline')) S.sheet.reflow();
+});
 document.addEventListener('input', function (ev) {
   var k = ev.target.getAttribute('data-input');
   if (k === 'dir-q') { S.dirQ = ev.target.value; var pos = ev.target.selectionStart; render(); var el = $('#dir_q'); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (e) {} } }
@@ -2421,6 +2471,8 @@ function toggle(t, id, field, valFn) {
 var A = {
   close: closeSheet,
   // One save at a time: a second tap while the first is still going is ignored, so nothing is ever created twice.
+  'type-open': function () { if (!S.sheet) return; S.sheet.typeOpen = true; if (S.sheet.reflow) S.sheet.reflow(); },
+  'auth-google': function () { if (S.busy) return; S.authMsg = ''; S.busy = true; render(); DB.signInGoogle().catch(function (e) { S.busy = false; S.authMsg = errMsg(e); render(); }); },
   'rec-edit': function () { if (!S.sheet) return; S.sheet.viewMode = false; redrawSheet(); var el = $('#layer .sheet'); if (el) el.scrollTop = 0; },
   'sheet-save': function () {
     var sh = S.sheet; if (!sh || !sh.save || sh.saving || S.busy) return;
@@ -2443,7 +2495,7 @@ var A = {
   // directory
   'dir-tab': function (t) { S.dirTab = t.getAttribute('data-v'); S.dirQ = ''; S.dirCat = ''; render(); },
   'contact-new': function (t, id) { if (id) { newContact(id); return; } openSheet(function () {
-    return '<h3>Add Contact</h3><p class="lead">What kind of contact is this?</p><div class="list">' + CTYPES.map(function (c) { return row({ act: 'contact-type', id: c[0], lead: '<span class="avatar ic tone-' + CTYPE_TONE[c[0]] + '">' + { team: IC.user, volunteer: IC.check, guest: IC.home, vendor: IC.tent, other: IC.book }[c[0]] + '</span>', title: esc(c[2] === 'Team' ? 'Team Member' : c[2]), sub: esc(CTYPE_HINT[c[0]]) }); }).join('') + '</div><div class="acts"><span class="grow"></span><button class="btn plain" data-a="close">Cancel</button></div>'; }); },
+    return '<h3>Add Contact</h3><p class="lead">What kind of contact is this?</p><div class="list">' + CTYPES.map(function (c) { return row({ act: 'contact-type', id: c[0], lead: '<span class="avatar ic tone-' + CTYPE_TONE[c[0]] + '">' + { team: IC.user, speaker: IC.mic, volunteer: IC.check, guest: IC.home, vendor: IC.tent, other: IC.book }[c[0]] + '</span>', title: esc(c[2] === 'Team' ? 'Team' : c[2]), sub: esc(CTYPE_HINT[c[0]]) }); }).join('') + '</div><div class="acts"><span class="grow"></span><button class="btn plain" data-a="close">Cancel</button></div>'; }); },
   'contact-type': function (t, id) { newContact(id); },
   'dir-open': function (t, id) { openDirRecord(t.getAttribute('data-t'), id); },
   'dir-add': function (t, id) { editDir(id, null); },
@@ -2611,7 +2663,7 @@ var A = {
   'change-email': function () { var f = [{ k: 'email', label: 'New Login Email', type: 'email', auto: true, hint: 'We’ll send a confirmation link to the new address. Your login changes once you click it.' }]; editProfile(f, {}, 'Change Login Email', function (v) { return DB.changeEmail(v.email).then(function () { if (DB.mode === 'demo') { S.user.email = v.email; myMember().email = v.email; } else toast('Check ' + v.email + ' for a confirmation link'); }); }); },
   'change-pw': function () { var f = [{ k: 'pw', label: 'New Password', auto: true, hint: 'At least 8 characters.' }]; openSheet(function () { return '<h3>Change Password</h3><div class="fgrid"><div class="fld"><label for="f_pw">New Password</label><input class="inp" id="f_pw" name="pw" type="password" minlength="8" autocomplete="new-password" autofocus><span class="hint">At least 8 characters.</span></div></div>' + sheetFoot(false); }, function () { var v = $('#layer #f_pw').value; if (v.length < 8) { sheetErr('Use at least 8 characters.'); return; } return busy(DB.changePassword(v), 'Password changed').then(closeSheet).catch(function () {}); }); },
   backup: function () { downloadBackup(); },
-  'bg-add': function (t, id) { var s = T('ed_signups').find(function (x) { return x.id === id; }); if (!s) return; closeSheet(); editRow('ed_people', null, F.person, { title: 'Add ' + s.name + ' To Contacts', base: { org_id: org().id, name: s.name, phone: s.phone || '', email: s.email || '', groups: ['Volunteer'], status: 'current', title: '', address: '', notes: '' } }); },
+  'bg-add': function (t, id) { var s = T('ed_signups').find(function (x) { return x.id === id; }); if (!s) return; closeSheet(); editRow('ed_people', null, personFields, { title: 'Add ' + s.name + ' To Contacts', base: { org_id: org().id, name: s.name, phone: s.phone || '', email: s.email || '', groups: ['Volunteer'], status: 'current', title: '', address: '', notes: '' } }); },
   'auto-remind': function () { var o = org(), v = !o.auto_remind; o.auto_remind = v; render(); DB.updateOrg(o.id, { auto_remind: v }).then(function () { toast(v ? 'Automatic reminders on' : 'Automatic reminders off'); }, function (e) { o.auto_remind = !v; render(); toast(errMsg(e)); }); },
   'notify-test': function () { toast('Sending…'); DB.notify('test').then(function (r) { toast(r && r.sent ? 'Test sent. Check your ' + (r.sent > 1 ? 'email and phone' : 'messages') + '.' : (r && r.errors && r.errors[0]) || 'Nothing was sent. Add your email or phone under My Profile.'); }, function (e) { toast(errMsg(e)); }); },
   notify: function (t, k) { var me = myMember(), p = prefs(); p[k] = !p[k]; me.prefs = p; render(); DB.updateMe(org().id, { prefs: p }).catch(function (e) { toast(errMsg(e)); }); },
