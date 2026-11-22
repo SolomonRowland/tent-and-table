@@ -452,7 +452,7 @@ function itemFields(kind) {
   return [{ k: 'title', label: 'Service Or Night', auto: true, ph: 'Night 1 Service' }, { k: 'on_date', label: 'Date', type: 'date', half: true }, { k: 'time_label', label: 'Time', half: true, ph: '7 PM' },
     { k: 'needed', label: 'Seats Available', type: 'int', half: true, def: 200 }, { k: 'fee', label: 'Registration Fee', type: 'money', half: true, hint: 'Per person. Leave at 0 when it’s free.' }, { k: 'notes', label: 'Details For Guests', type: 'textarea', ph: 'Doors open at 6:30 PM.' }];
 }
-function formBody(fields, data) { return '<div class="fgrid">' + fields.map(function (f) { return f.html ? f.html(data) : fieldHtml(f, data); }).join('') + '</div>'; }
+function formBody(fields, data) { return '<div class="fgrid">' + fields.map(function (f) { return f.html ? f.html(data) : f.drawn ? '' : fieldHtml(f, data); }).join('') + '</div>'; }
 function readForm(fields, base) {
   var out = JSON.parse(JSON.stringify(base || {})), root = $('#layer .sheet');
   fields.forEach(function (f) {
@@ -521,7 +521,14 @@ function sessCard(e) { var l = e.sessions || []; return l.length ? '<div class="
 var TRAVEL = [['car', 'Vehicle', 'Vehicle needed', 'Vehicle secured'], ['hotel', 'Hotel', 'Hotel needed', 'Hotel booked'], ['flight', 'Flight', 'Flight needed', 'Flight booked'], ['pickup', 'Airport Pickup', 'Airport pickup needed', 'Driver arranged'], ['meals', 'Meals', 'Meals needed', 'Meals arranged']];
 function travelGaps(a) { var d = (a && a.details) || {}; return TRAVEL.filter(function (t) { return d[t[0] + '_need'] && !d[t[0] + '_ok']; }).map(function (t) { return t[1]; }); }
 function travelSet(a) { var d = (a && a.details) || {}; return TRAVEL.filter(function (t) { return d[t[0] + '_need'] && d[t[0] + '_ok']; }).map(function (t) { return t[1]; }); }
-function travelPills(a) { return travelGaps(a).map(function (x) { return pill('Needs ' + x, 'red'); }).concat(travelSet(a).map(function (x) { return pill(x + ' Set', 'green'); })).join(' '); }
+function travelPills(a) { return travelGaps(a).map(function (x) { return pill('Needs ' + x, 'red'); }).concat(travelSet(a).map(function (x) { return pill(x + ' Set', 'green'); })).join(''); }
+// Travel and stay as one compact table: a row per item with Needed and Done side by side.
+function travelTable(data) {
+  var d = (data && data.details) || {}, box = function (k, lbl, t) { return '<label class="tv-box"><input type="checkbox" name="details.' + k + '"' + (d[k] ? ' checked' : '') + ' aria-label="' + esc(lbl + ': ' + t) + '"><span>' + esc(t) + '</span></label>'; };
+  return '<div class="fld"><label>Travel And Stay</label><span class="hint">Tick what they need, then tick Done once it’s taken care of.</span><div class="tvtable">' + TRAVEL.map(function (t) {
+    return '<div class="tvrow"><b>' + esc(t[1]) + '</b>' + box(t[0] + '_need', t[1], 'Needed') + box(t[0] + '_ok', t[1], 'Done') + '</div>';
+  }).join('') + '</div></div>';
+}
 
 /* ================================================================ field sets */
 var F = {
@@ -549,16 +556,22 @@ var F = {
     { k: 'notes', label: 'Notes', type: 'textarea' }],
   event: [
     { k: 'title', label: 'Event Name', auto: true, ph: 'Annual Tent Revival' },
+    { html: function () { return '<div class="fsec">When</div>'; } },
     { k: 'starts_on', label: 'First Day', type: 'date', half: true }, { k: 'ends_on', label: 'Last Day', type: 'date', half: true, hint: 'Leave empty for a one-day event.' },
     { k: 'start_time', label: 'Starts', type: 'time', half: true }, { k: 'end_time', label: 'Ends', type: 'time', half: true },
     { html: sessField },
-    { k: 'time_label', label: 'Time Wording (Optional)', ph: 'Nightly at 7 PM', hint: 'What people see next to the date. Leave it blank to use the start and end times.' }, { k: 'place', label: 'Place', half: true, ph: 'Miller Field' }, { k: 'address', label: 'Address', half: true },
+    { k: 'time_label', label: 'Time Wording (Optional)', ph: 'Nightly at 7 PM', hint: 'What people see next to the date. Leave it blank to use the start and end times.' },
+    { html: function () { return '<div class="fsec">Where</div>'; } }, { k: 'place', label: 'Place', half: true, ph: 'Miller Field' }, { k: 'address', label: 'Address', half: true },
+    { html: function () { return '<div class="fsec">Public Page</div>'; } },
     { k: 'about', label: 'About This Event', type: 'textarea', hint: 'Shown on the public sign-up page.' },
-    { k: 'theme', label: 'Theme', ph: 'Let His Presence Fall' }, { k: 'purpose', label: 'Purpose', type: 'textarea', ph: 'The purpose of this event is to give God glory…', hint: 'The heart behind the event. Your team sees it on the Overview.' },
     { k: 'contact_line', label: 'Public Contact Line', ph: 'Questions? Text Steve at (555) 555-0142' },
-    { k: 'giving_link', label: 'Online Giving Link', type: 'url', ph: 'https://…', half: true }, { k: 'budget', label: 'Budget', type: 'money', half: true },
-    { k: 'volunteer_goal', label: 'Volunteer Goal', type: 'int', half: true, hint: 'How many volunteers you need in all.' },
     { k: 'is_open', label: 'Public Sign-Ups Are Open', type: 'check', def: true },
+    { html: function () { return '<div class="fsec">The Heart Of It</div>'; } },
+    { k: 'theme', label: 'Theme', ph: 'Let His Presence Fall' }, { k: 'purpose', label: 'Purpose', type: 'textarea', ph: 'The purpose of this event is to give God glory…', hint: 'The heart behind the event. Your team sees it on the Overview.' },
+    { html: function () { return '<div class="fsec">Money And Goals</div>'; } },
+    { k: 'budget', label: 'Budget', type: 'money', half: true }, { k: 'volunteer_goal', label: 'Volunteer Goal', type: 'int', half: true, ph: 'How many in all' },
+    { k: 'giving_link', label: 'Online Giving Link', type: 'url', ph: 'https://…' },
+    { html: function () { return '<div class="fsec">Tabs</div>'; } },
     { html: function () { return '<div class="fld"><label>Start From A Preset</label><div class="seg wrap">' + Object.keys(PRESETS).map(function (k) { return '<button type="button" data-a="preset" data-v="' + k + '">' + esc(PRESETS[k].label) + '</button>'; }).join('') + '</div></div>'; } },
     { k: 'sections', label: 'What This Event Uses', type: 'multi', opts: SECTIONS, hint: 'Overview, Tasks and Share are always there.' }],
   schedule: [
@@ -610,8 +623,8 @@ var F_ASSIGN = {
     if (team === 'speaker') f = f.concat([
       { k: 'details.status', label: 'Status', type: 'select', opts: ['Invited', 'Confirmed', 'Declined'], half: true }, { k: 'details.date', label: 'Speaking Date', type: 'date', half: true },
       { k: 'details.time', label: 'Time', half: true, ph: '7:30 PM' }, { k: 'details.topic', label: 'Message', half: true }]);
-    if (team === 'speaker' || team === 'worship') f = f.concat([{ html: function () { return '<div class="fld travelhead"><label>Travel And Stay</label><span class="hint">Tick what they need. Tick the second box once it’s taken care of.</span></div>'; } }]
-      .concat(TRAVEL.reduce(function (l, t) { return l.concat([{ k: 'details.' + t[0] + '_need', label: t[2], type: 'check', half: true }, { k: 'details.' + t[0] + '_ok', label: t[3], type: 'check', half: true }]); }, []))
+    if (team === 'speaker' || team === 'worship') f = f.concat([{ html: travelTable }]
+      .concat(TRAVEL.reduce(function (l, t) { return l.concat([{ k: 'details.' + t[0] + '_need', label: t[2], type: 'check', drawn: true }, { k: 'details.' + t[0] + '_ok', label: t[3], type: 'check', drawn: true }]); }, []))
       .concat([{ k: 'details.arrive', label: 'Arrives', half: true, ph: 'Fri 2 PM, O’Hare' }, { k: 'details.depart', label: 'Leaves', half: true, ph: 'Sun 11 AM' },
         { k: 'details.travel', label: 'Travel Details', ph: 'Flight number, rental car, mileage, who’s driving' }, { k: 'details.lodging', label: 'Hotel Details', ph: 'Hotel name, confirmation number, nights' },
         { k: 'details.party', label: 'Traveling With', half: true, ph: 'Spouse, 2 band members' }, { k: 'details.diet', label: 'Food Needs Or Allergies', half: true, ph: 'Gluten free' },
@@ -1346,7 +1359,7 @@ function dirPeople(e) {
     h += secHead(t[1], addBtn('Add', 'pick-people', t[0]), list.length ? String(list.length) : '') + listBox(list.map(function (x) {
       if (t[0] !== 'speaker') return personRow(x);
       var d = x.a.details || {};
-      return personRow(x, esc([d.date ? fmtDay(d.date) : '', d.time, d.topic ? '“' + d.topic + '”' : ''].filter(Boolean).join(' · ')) + (num(x.a.amount) ? '<br>Honorarium ' + money(x.a.amount) + ' · ' + esc(x.a.pay_status) : ''),
+      return personRow(x, esc([d.date ? fmtDay(d.date) : '', d.time, d.topic ? '“' + d.topic + '”' : ''].filter(Boolean).join(' · ')) + (num(x.a.amount) ? '<br>Honorarium ' + money(x.a.amount) + ' · ' + esc(x.a.pay_status) : ''), '',
         pill(d.status || 'Confirmed', (d.status || 'Confirmed') === 'Confirmed' ? 'green' : d.status === 'Declined' ? '' : 'amber'));
     }), t[2]);
   });
@@ -1567,7 +1580,7 @@ function wsCalendar(e) {
 
 /* ---------- people */
 function assigned(team) { return evRows('ed_event_people').filter(function (a) { return a.team === team; }).map(function (a) { return { a: a, p: byId('ed_people', a.person_id) || { name: '(Removed)' } }; }).sort(function (x, y) { return x.p.name.localeCompare(y.p.name); }); }
-function personRow(x, extraSub, right) { return row({ act: 'edit-assign', id: x.a.id, lead: avatar(x.p.name, x.a.team === 'volunteer' ? 'green' : 'red'), title: esc(x.p.name), sub: contactSub([x.a.role || x.p.title, x.a.days], x.p.phone, x.p.email) + (extraSub ? '<br>' + extraSub : '') + (travelPills(x.a) ? '<br>' + travelPills(x.a) : ''), right: right || '' }); }
+function personRow(x, extraSub, right, pills) { var pl = (pills || '') + travelPills(x.a); return row({ act: 'edit-assign', id: x.a.id, lead: avatar(x.p.name, x.a.team === 'volunteer' ? 'green' : 'red'), title: esc(x.p.name), sub: contactSub([x.a.role || x.p.title, x.a.days], x.p.phone, x.p.email) + (extraSub ? '<br>' + extraSub : '') + (pl ? '<span class="pills">' + pl + '</span>' : ''), right: right || '' }); }
 function signupBlock(kind, title, addLabel) {
   var list = evRows('ed_items').filter(function (i) { return i.kind === kind; }).sort(function (a, b) { return String(a.on_date || '').localeCompare(String(b.on_date || '')) || a.sort - b.sort; });
   var f = fill(kind), groups = [];
