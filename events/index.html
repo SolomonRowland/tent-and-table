@@ -930,6 +930,26 @@ button.act{border:0;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
 .mp-main{flex:1;min-width:0}.mp-main b{display:block;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mp-main span{display:block;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mp-tag{flex:0 0 auto;font-size:11px;font-weight:700;color:#565D67;background:var(--well);border-radius:999px;padding:3px 9px;max-width:38%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* sessions, travel needs, contacts with no email in the email picker */
+#sess_box{margin-top:8px;display:flex;flex-direction:column;gap:10px}
+.sessrow{border:1.5px solid #E3DADB;border-radius:14px;padding:10px;background:#fff}
+.sess-top{display:flex;gap:8px;align-items:center}.sess-top .inp{flex:1;min-width:0}
+.sess-x{flex:0 0 44px;width:44px;height:44px;border:0;border-radius:12px;background:var(--well);color:var(--ink);font-size:22px;line-height:1;cursor:pointer}
+.sess-when{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:8px;margin-top:8px}
+.sess-when label{display:block;font-size:12px;font-weight:700;color:var(--muted);min-width:0}
+.sess-when .inp{width:100%;min-width:0;margin-top:3px;padding-left:8px;padding-right:6px;font-size:14px}
+@media (max-width:380px){.sess-when{grid-template-columns:1fr 1fr}.sess-when label:first-child{grid-column:1/-1}}
+.sesslist{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.sessline{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:14.5px}
+.sessline b{font-weight:600;min-width:0}.sessline span{flex:0 0 auto;color:var(--muted);font-size:13.5px;text-align:right}
+.phero .sesslist{margin-top:14px;margin-bottom:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.28)}
+.phero .sessline span{color:inherit;opacity:.88}
+.travelhead{margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
+.mprow.noem{cursor:default;align-items:flex-start}
+.mp-main .mp-add{margin-top:6px;min-height:40px;width:100%;font-size:14px}
+.mailpick+.btn.block,.grouplbl+.small{margin-top:8px}
+.mailpick~.btn.block{margin-top:12px}
 </style>
 </head>
 <body>

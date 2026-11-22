@@ -1,4 +1,4 @@
--- Tent & Table database (version 16).
+-- Tent & Table database (version 17).
 -- Paste this whole file into Supabase: SQL Editor -> New query -> Run.
 -- It is safe to run more than once. Every table starts with "ed_", so it can
 -- share a Supabase project with Tend Home without touching Tend's data.
@@ -423,7 +423,14 @@ create table if not exists public.ed_cards (
 );
 create index if not exists ed_cards_event_idx on public.ed_cards (event_id);
 
--- Upgrades from versions 12 to 16 (they come after every table above exists).
+-- Upgrades from versions 12 to 17 (they come after every table above exists).
+-- version 17: an event's overall start and end time, and its sessions (each with a day, a start and an end)
+alter table public.ed_events add column if not exists start_time time;
+alter table public.ed_events add column if not exists end_time time;
+alter table public.ed_events add column if not exists sessions jsonb not null default '[]'::jsonb;
+alter table public.ed_events drop constraint if exists ed_events_sessions_check;
+alter table public.ed_events add constraint ed_events_sessions_check check (jsonb_typeof(sessions) = 'array' and length(sessions::text) <= 20000);
+
 -- version 16: registration fee on a service, consent to contact and paid on an RSVP, "no bulk email" on a contact, ministry tax number
 alter table public.ed_items add column if not exists fee numeric(8,2) not null default 0;
 alter table public.ed_items drop constraint if exists ed_items_fee_check;
@@ -639,8 +646,10 @@ begin
   s := left(regexp_replace(lower(coalesce(nullif(trim(p_title), ''), ev.title)), '[^a-z0-9]+', '-', 'g'), 40);
   s := trim(both '-' from s) || '-' || left(replace(gen_random_uuid()::text, '-', ''), 4);
   if length(s) < 6 then s := 'event-' || s; end if;
-  insert into public.ed_events (org_id, slug, title, starts_on, ends_on, time_label, place, address, about, contact_line, giving_link, budget, sections, is_open, volunteer_goal, theme, purpose)
-    values (ev.org_id, s, coalesce(nullif(ed_clip(p_title, 120), ''), ev.title), coalesce(p_start, ev.starts_on), ev.ends_on + delta,
+  insert into public.ed_events (org_id, slug, title, starts_on, ends_on, start_time, end_time, sessions, time_label, place, address, about, contact_line, giving_link, budget, sections, is_open, volunteer_goal, theme, purpose)
+    values (ev.org_id, s, coalesce(nullif(ed_clip(p_title, 120), ''), ev.title), coalesce(p_start, ev.starts_on), ev.ends_on + delta, ev.start_time, ev.end_time,
+            coalesce((select jsonb_agg(case when coalesce(x->>'on_date', '') ~ '^\d{4}-\d{2}-\d{2}$' then x || jsonb_build_object('on_date', to_char((x->>'on_date')::date + delta, 'YYYY-MM-DD')) else x end order by o)
+                      from jsonb_array_elements(ev.sessions) with ordinality as t(x, o)), '[]'::jsonb),
             ev.time_label, ev.place, ev.address, ev.about, ev.contact_line, ev.giving_link, ev.budget, ev.sections, true, ev.volunteer_goal, ev.theme, ev.purpose)
     returning id into nid;
   insert into public.ed_schedule (event_id, on_date, start_time, end_time, title, location, owner, owner_ref, notes)
@@ -675,7 +684,7 @@ begin
   select jsonb_build_object(
     'event', jsonb_build_object('slug', ev.slug, 'title', ev.title, 'starts_on', ev.starts_on, 'ends_on', ev.ends_on,
       'time_label', ev.time_label, 'place', ev.place, 'address', ev.address, 'about', ev.about, 'contact_line', ev.contact_line,
-      'giving_link', ev.giving_link, 'is_open', ev.is_open, 'volunteer_goal', ev.volunteer_goal,
+      'giving_link', ev.giving_link, 'is_open', ev.is_open, 'volunteer_goal', ev.volunteer_goal, 'sessions', ev.sessions,
       'volunteer_count', (select count(*) from public.ed_signups s join public.ed_items i on i.id = s.item_id where i.event_id = ev.id and i.kind = 'serve')
         + (select count(*) from public.ed_event_people p where p.event_id = ev.id and p.team = 'volunteer'), 'sections', to_jsonb(ev.sections),
       'ministry', (select name from public.ed_orgs where id = ev.org_id),

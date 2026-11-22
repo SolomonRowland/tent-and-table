@@ -486,6 +486,42 @@ function editRow(t, rec, fields, opts) {
   }, { del: rec ? function () { ask(opts.delMsg || 'Delete this?', 'Delete', function () { return remove(t, rec.id).then(function () { render(); }); }, opts.delSub); } : null, after: opts.afterDraw });
 }
 
+/* ================================================================ sessions (an event can have several gatherings, each with its own times) */
+function sessBox() {
+  return (S.sess || []).map(function (x, i) {
+    return '<div class="sessrow" data-sid="' + esc(x.id || '') + '"><div class="sess-top"><input class="inp" data-sess="title" maxlength="80" placeholder="Session name, like Friday Night" aria-label="Session ' + (i + 1) + ' name" value="' + esc(x.title || '') + '"><button type="button" class="sess-x" data-a="sess-del" data-id="' + i + '" aria-label="Remove session ' + (i + 1) + '">×</button></div>' +
+      '<div class="sess-when"><label>Day<input class="inp" type="date" data-sess="on_date" value="' + esc(x.on_date || '') + '"></label><label>Starts<input class="inp" type="time" data-sess="start" value="' + esc(x.start || '') + '"></label><label>Ends<input class="inp" type="time" data-sess="end" value="' + esc(x.end || '') + '"></label></div></div>';
+  }).join('') + '<button type="button" class="btn ghost block" data-a="sess-add">' + ((S.sess || []).length ? 'Add Another Session' : 'Add Session') + '</button>';
+}
+function sessField() { return '<div class="fld"><label>Sessions (Optional)</label><span class="hint">For an event with more than one gathering, like Friday night, then Saturday morning, afternoon and night. Each one gets its own start and end time.</span><div id="sess_box">' + sessBox() + '</div></div>'; }
+function sessRead() {
+  var box = $('#sess_box'); if (!box) return;
+  S.sess = $$('.sessrow', box).map(function (r) { var g = function (k) { return r.querySelector('[data-sess="' + k + '"]').value.trim(); }; return { id: r.getAttribute('data-sid') || uuid(), title: g('title'), on_date: g('on_date'), start: g('start'), end: g('end') }; });
+}
+// Returns the tidy list, or a sentence saying what to fix.
+function sessClean(v) {
+  var list = (S.sess || []).filter(function (x) { return x.title || x.on_date || x.start || x.end; }), bad = '';
+  list = list.map(function (x, i) {
+    var d = x.on_date || v.starts_on || '';
+    if (d && v.starts_on && (d < v.starts_on || d > (v.ends_on || v.starts_on))) bad = 'Session ' + (i + 1) + ' is on a day outside the event dates.';
+    return { id: x.id || uuid(), title: (x.title || '').slice(0, 80), on_date: d, start: x.start || '', end: x.end || '' };
+  });
+  if (bad) return bad;
+  if (list.length > 40) return 'That’s a lot of sessions. Keep it to 40 or fewer.';
+  list.sort(function (a, b) { return (a.on_date + (a.start || '99')).localeCompare(b.on_date + (b.start || '99')); });
+  list.forEach(function (x, i) { if (!x.title) x.title = 'Session ' + (i + 1); });
+  return list;
+}
+function sessTime(x) { return x.start ? fmtTime(x.start) + (x.end ? ' – ' + fmtTime(x.end) : '') : ''; }
+function sessWhen(x) { return [x.on_date ? fmtDay(x.on_date) : '', sessTime(x)].filter(Boolean).join(' · '); }
+function sessList(list) { return '<div class="sesslist">' + list.map(function (x) { return '<div class="sessline"><b>' + esc(x.title) + '</b><span>' + esc(sessWhen(x)) + '</span></div>'; }).join('') + '</div>'; }
+function sessCard(e) { var l = e.sessions || []; return l.length ? '<div class="card sesscard"><div class="heart-k">' + esc(plural(l.length, 'Session')) + '</div>' + sessList(l) + '</div>' : ''; }
+// Travel and stay for someone coming in for the event: what they still need that isn't booked yet.
+var TRAVEL = [['car', 'Vehicle', 'Vehicle needed', 'Vehicle secured'], ['hotel', 'Hotel', 'Hotel needed', 'Hotel booked'], ['flight', 'Flight', 'Flight needed', 'Flight booked'], ['pickup', 'Airport Pickup', 'Airport pickup needed', 'Driver arranged'], ['meals', 'Meals', 'Meals needed', 'Meals arranged']];
+function travelGaps(a) { var d = (a && a.details) || {}; return TRAVEL.filter(function (t) { return d[t[0] + '_need'] && !d[t[0] + '_ok']; }).map(function (t) { return t[1]; }); }
+function travelSet(a) { var d = (a && a.details) || {}; return TRAVEL.filter(function (t) { return d[t[0] + '_need'] && d[t[0] + '_ok']; }).map(function (t) { return t[1]; }); }
+function travelPills(a) { return travelGaps(a).map(function (x) { return pill('Needs ' + x, 'red'); }).concat(travelSet(a).map(function (x) { return pill(x + ' Set', 'green'); })).join(' '); }
+
 /* ================================================================ field sets */
 var F = {
   person: [
@@ -513,7 +549,9 @@ var F = {
   event: [
     { k: 'title', label: 'Event Name', auto: true, ph: 'Annual Tent Revival' },
     { k: 'starts_on', label: 'First Day', type: 'date', half: true }, { k: 'ends_on', label: 'Last Day', type: 'date', half: true, hint: 'Leave empty for a one-day event.' },
-    { k: 'time_label', label: 'Time', ph: 'Nightly at 7 PM' }, { k: 'place', label: 'Place', half: true, ph: 'Miller Field' }, { k: 'address', label: 'Address', half: true },
+    { k: 'start_time', label: 'Starts', type: 'time', half: true }, { k: 'end_time', label: 'Ends', type: 'time', half: true },
+    { html: sessField },
+    { k: 'time_label', label: 'Time Wording (Optional)', ph: 'Nightly at 7 PM', hint: 'What people see next to the date. Leave it blank to use the start and end times.' }, { k: 'place', label: 'Place', half: true, ph: 'Miller Field' }, { k: 'address', label: 'Address', half: true },
     { k: 'about', label: 'About This Event', type: 'textarea', hint: 'Shown on the public sign-up page.' },
     { k: 'theme', label: 'Theme', ph: 'Let His Presence Fall' }, { k: 'purpose', label: 'Purpose', type: 'textarea', ph: 'The purpose of this event is to give God glory…', hint: 'The heart behind the event. Your team sees it on the Overview.' },
     { k: 'contact_line', label: 'Public Contact Line', ph: 'Questions? Text Steve at (555) 555-0142' },
@@ -570,8 +608,13 @@ var F_ASSIGN = {
     var f = [{ k: 'team', label: 'Team', type: 'select', opts: TEAMS, half: true }, { k: 'role', label: 'Role At This Event', type: 'list', opts: TITLES, half: true }, { k: 'days', label: 'Days Serving', ph: 'All Nights' }];
     if (team === 'speaker') f = f.concat([
       { k: 'details.status', label: 'Status', type: 'select', opts: ['Invited', 'Confirmed', 'Declined'], half: true }, { k: 'details.date', label: 'Speaking Date', type: 'date', half: true },
-      { k: 'details.time', label: 'Time', half: true, ph: '7:30 PM' }, { k: 'details.topic', label: 'Message', half: true },
-      { k: 'details.travel', label: 'Travel', ph: 'Flight, pickup, mileage' }, { k: 'details.lodging', label: 'Lodging', ph: 'Hotel or host home' }]);
+      { k: 'details.time', label: 'Time', half: true, ph: '7:30 PM' }, { k: 'details.topic', label: 'Message', half: true }]);
+    if (team === 'speaker' || team === 'worship') f = f.concat([{ html: function () { return '<div class="fld travelhead"><label>Travel And Stay</label><span class="hint">Tick what they need. Tick the second box once it’s taken care of.</span></div>'; } }]
+      .concat(TRAVEL.reduce(function (l, t) { return l.concat([{ k: 'details.' + t[0] + '_need', label: t[2], type: 'check', half: true }, { k: 'details.' + t[0] + '_ok', label: t[3], type: 'check', half: true }]); }, []))
+      .concat([{ k: 'details.arrive', label: 'Arrives', half: true, ph: 'Fri 2 PM, O’Hare' }, { k: 'details.depart', label: 'Leaves', half: true, ph: 'Sun 11 AM' },
+        { k: 'details.travel', label: 'Travel Details', ph: 'Flight number, rental car, mileage, who’s driving' }, { k: 'details.lodging', label: 'Hotel Details', ph: 'Hotel name, confirmation number, nights' },
+        { k: 'details.party', label: 'Traveling With', half: true, ph: 'Spouse, 2 band members' }, { k: 'details.diet', label: 'Food Needs Or Allergies', half: true, ph: 'Gluten free' },
+        { k: 'details.needs', label: 'Other Needs', ph: 'Green room, product table, wheelchair access, parking pass' }]));
     return f.concat([
       { k: 'amount', label: team === 'speaker' ? 'Honorarium' : 'Stipend Or Fee', type: 'money', half: true }, { k: 'pay_status', label: 'Payment Status', type: 'select', opts: PAY, half: true },
       { k: 'payer', label: 'Who Pays It', type: 'list', opts: function () { return peopleNames(); }, half: true }, { k: 'due_on', label: 'Payment Due', type: 'date', half: true },
@@ -1458,7 +1501,7 @@ function wsOverview(e) {
   return '<div class="countdown"><div class="cd-num">' + (days != null && days > 1 ? '<b>' + days + '</b><span>Days<br>To Go</span>' : '<b class="word">' + esc(cd || 'Not Scheduled') + '</b>') + '</div>' +
       '<div class="cd-side">' + (ts.length ? '<div class="cd-k">Tasks</div><div class="cd-v">' + td + ' of ' + ts.length + ' done</div><div class="cd-bar"><i style="width:' + pct + '%"></i></div>' : '<div class="cd-k">' + esc(fmtRange(e.starts_on, e.ends_on)) + '</div>' + ((e.starts_on || '9') > TODAY ? '<button class="cd-v link" data-a="ev-tab" data-id="tasks">Add the first task</button>' : '')) +
       (e.address ? '<a class="cd-link" href="' + esc(mapUrl(e.address)) + '" target="_blank" rel="noopener">' + IC.pin + ' Directions</a>' : '') + '</div></div>' +
-    todayCard(e) + weatherCard(e) + heartCard(e) +
+    todayCard(e) + weatherCard(e) + sessCard(e) + heartCard(e) +
     (g.length ? secHead('At A Glance') + '<div class="stats glance">' + g.slice(0, 6).join('') + '</div>' : '') +
     secHead('Needs Attention', '', att.length ? String(att.length) : '') +
     (att.length ? '<div class="list">' + att.map(function (a) { return row({ act: 'ev-tab', id: a[3], cls: 'flag ' + a[0], title: esc(a[1]), sub: esc(a[2]) }); }).join('') + '</div>'
@@ -1521,7 +1564,7 @@ function wsCalendar(e) {
 
 /* ---------- people */
 function assigned(team) { return evRows('ed_event_people').filter(function (a) { return a.team === team; }).map(function (a) { return { a: a, p: byId('ed_people', a.person_id) || { name: '(Removed)' } }; }).sort(function (x, y) { return x.p.name.localeCompare(y.p.name); }); }
-function personRow(x, extraSub, right) { return row({ act: 'edit-assign', id: x.a.id, lead: avatar(x.p.name, x.a.team === 'volunteer' ? 'green' : 'red'), title: esc(x.p.name), sub: contactSub([x.a.role || x.p.title, x.a.days], x.p.phone, x.p.email) + (extraSub ? '<br>' + extraSub : ''), right: right || '' }); }
+function personRow(x, extraSub, right) { return row({ act: 'edit-assign', id: x.a.id, lead: avatar(x.p.name, x.a.team === 'volunteer' ? 'green' : 'red'), title: esc(x.p.name), sub: contactSub([x.a.role || x.p.title, x.a.days], x.p.phone, x.p.email) + (extraSub ? '<br>' + extraSub : '') + (travelPills(x.a) ? '<br>' + travelPills(x.a) : ''), right: right || '' }); }
 function signupBlock(kind, title, addLabel) {
   var list = evRows('ed_items').filter(function (i) { return i.kind === kind; }).sort(function (a, b) { return String(a.on_date || '').localeCompare(String(b.on_date || '')) || a.sort - b.sort; });
   var f = fill(kind), groups = [];
@@ -1943,7 +1986,7 @@ function calUrl(e) {
 function pubHero(extra) {
   var e = S.pub.event;
   return '<div class="phero"><div class="in"><div class="eyebrow">' + (e.logo ? '<img class="plogo" src="' + esc(e.logo) + '" alt="">' : '') + esc(e.ministry || 'You’re Invited') + '</div><h1>' + esc(e.title) + '</h1><div class="meta">' +
-    esc([fmtRange(e.starts_on, e.ends_on), e.time_label].filter(Boolean).join(' · ')) + (e.place || e.address ? '<br>' + esc([e.place, e.address].filter(Boolean).join(', ')) : '') + '</div>' + (extra || '') + '</div></div>';
+    esc([fmtRange(e.starts_on, e.ends_on), e.time_label].filter(Boolean).join(' · ')) + (e.place || e.address ? '<br>' + esc([e.place, e.address].filter(Boolean).join(', ')) : '') + '</div>' + ((e.sessions || []).length ? sessList(e.sessions) : '') + (extra || '') + '</div></div>';
 }
 function pubGoal(e) {
   var g = num(e.volunteer_goal), n = Math.min(g, num(e.volunteer_count)), pct = Math.round(100 * n / g);
@@ -2007,8 +2050,12 @@ function viewCard() {
 /* ================================================================ event actions */
 function editEvent(ev) {
   var base = ev ? Object.assign({}, ev, { sections: SECTIONS.map(function (s) { return s[0]; }).filter(function (k) { return secOn(ev.sections, k); }) }) : { is_open: true, sections: PRESETS.big.on.slice(), budget: 0, giving_link: org().giving_link || '' };
+  S.sess = JSON.parse(JSON.stringify((ev && ev.sessions) || []));
+  var oldIds = S.sess.map(function (x) { return x.id; }), autoWas = ev ? wizTime(ev) : '';
   editRow('ed_events', ev ? base : null, F.event, { title: ev ? 'Event Details' : 'New Event', base: ev ? null : base, del: false,
     prep: function (v) {
+      sessRead(); var sc = sessClean(v); if (typeof sc === 'string') return sc; v.sessions = S.sess = sc;
+      if (!v.time_label || (ev && v.time_label === autoWas)) v.time_label = wizTime(v);
       if (v.ends_on && v.starts_on && v.ends_on < v.starts_on) return 'The last day can’t be before the first day.';
       if (!v.ends_on) v.ends_on = v.starts_on || null;
       if (v.sections.length === SECTIONS.length) v.sections = [];
@@ -2017,7 +2064,15 @@ function editEvent(ev) {
       v.volunteer_goal = Math.max(0, Math.min(10000, v.volunteer_goal || 0));
       if (!ev) { v.org_id = org().id; v.slug = slugFor(v.title); }
       return v;
-    }, after: function (r) { if (!ev) openEvent(r.id); else S.ev = r; } });
+    }, after: function (r) {
+      if (!ev) { openEvent(r.id); return; }
+      S.ev = r;
+      // A new session on an event that takes RSVPs gets its own RSVP, so guests can pick the sessions they can make.
+      var att = evRows('ed_items', r).filter(function (i) { return i.kind === 'attend'; }), fresh = (r.sessions || []).filter(function (x) { return oldIds.indexOf(x.id) < 0; });
+      if (!on('guests', r) || !att.length || !fresh.length) return;
+      fresh.reduce(function (p, x, i) { return p.then(function () { return DB.save('ed_items', { event_id: r.id, kind: 'attend', title: x.title, on_date: x.on_date || r.starts_on, time_label: sessTime(x), start_time: x.start || null, end_time: x.end || null, needed: att[0].needed || 200, notes: '', sort: 50 + i }).then(function (row) { put('ed_items', row); }); }); }, Promise.resolve())
+        .then(function () { toast(plural(fresh.length, 'RSVP') + ' added for the new ' + (fresh.length === 1 ? 'session' : 'sessions')); render(); }).catch(function () {});
+    } });
 }
 /* New Event walkthrough: one question at a time, then it builds the event and its share pages. */
 var WIZ_NEEDS = [
@@ -2040,7 +2095,7 @@ var HEART_FIELDS = [
   { k: 'purpose', label: 'Purpose', type: 'textarea', ph: 'The purpose of this event is to give God glory, to see the lost saved and the sick healed.', hint: 'Why you’re doing this. Shown to your team on the event Overview, not on public pages.' }];
 var WIZ_STEPS = [
   { t: 'Name', q: 'What’s the event called?', f: [{ k: 'title', label: 'Event Name', auto: true, ph: 'Annual Tent Revival' }] },
-  { t: 'When', q: 'When is it?', f: [{ k: 'starts_on', label: 'First Day', type: 'date', half: true }, { k: 'ends_on', label: 'Last Day', type: 'date', half: true, hint: 'Leave empty for one day.' }, { k: 'start_time', label: 'Starts', type: 'time', half: true }, { k: 'end_time', label: 'Ends', type: 'time', half: true }] },
+  { t: 'When', q: 'When is it?', f: [{ k: 'starts_on', label: 'First Day', type: 'date', half: true }, { k: 'ends_on', label: 'Last Day', type: 'date', half: true, hint: 'Leave empty for one day.' }, { k: 'start_time', label: 'Starts', type: 'time', half: true }, { k: 'end_time', label: 'Ends', type: 'time', half: true }, { html: sessField }] },
   { t: 'Where', q: 'Where is it?', f: [{ k: 'place', label: 'Place', ph: 'Miller Field', auto: true }, { k: 'address', label: 'Address', ph: '1200 Waterman Rd, Waterman, IL', hint: 'Used for directions on the share pages.' }] },
   { t: 'Needs', q: 'What will this event have?', needs: true },
   { t: 'Goals', q: 'Set your targets.', goals: true },
@@ -2057,14 +2112,14 @@ function goalFields() {
 }
 function wizFields() { var st = WIZ_STEPS[S.wiz.step]; return st.goals ? goalFields() : st.f || []; }
 function newEventWizard() {
-  S.wiz = { step: 0, err: '', v: { is_open: true, giving_link: org().giving_link || '', needs: {} } };
+  S.sess = []; S.wiz = { step: 0, err: '', v: { is_open: true, giving_link: org().giving_link || '', needs: {} } };
   openSheet(wizHtml, wizCreate, { wizard: true });
 }
-function wizKeep() { var f = wizFields(); if (f.length && $('#layer .sheet')) S.wiz.v = readForm(f, S.wiz.v); }
+function wizKeep() { var f = wizFields(); if (f.length && $('#layer .sheet')) { S.wiz.v = readForm(f, S.wiz.v); sessRead(); } }
 function wizCheck() {
   var st = WIZ_STEPS[S.wiz.step], v = S.wiz.v;
   if (st.t === 'Name' && !String(v.title || '').trim()) return 'Give the event a name.';
-  if (st.t === 'When') { if (!v.starts_on) return 'Pick the first day.'; if (v.ends_on && v.ends_on < v.starts_on) return 'The last day can’t be before the first day.'; }
+  if (st.t === 'When') { if (!v.starts_on) return 'Pick the first day.'; if (v.ends_on && v.ends_on < v.starts_on) return 'The last day can’t be before the first day.'; var sc = sessClean(v); if (typeof sc === 'string') return sc; S.sess = sc; }
   if (st.needs) { var miss = WIZ_NEEDS.filter(function (n) { return v.needs[n[0]] == null; }); if (miss.length) return 'Answer yes or no for each one. ' + plural(miss.length, 'question') + ' left.'; if (!WIZ_NEEDS.some(function (n) { return v.needs[n[0]]; })) return 'Pick at least one thing this event will have.'; }
   if (st.goals && v.needs.volunteers && !(v.volunteer_goal > 0)) return 'How many volunteers do you need?';
   return '';
@@ -2078,6 +2133,8 @@ function wizMove(d) {
   var sh = $('#layer .sheet'); if (sh) sh.scrollTop = 0;
 }
 function wizTime(v) {
+  var ss = v.sessions || (S.wiz && S.wiz.v === v ? S.sess : null) || [];
+  if (ss.length > 1) return plural(ss.length, 'session');
   if (!v.start_time) return '';
   var t = fmtTime(v.start_time) + (v.end_time ? ' – ' + fmtTime(v.end_time) : '');
   return v.ends_on && v.ends_on > v.starts_on ? 'Nightly, ' + t : t;
@@ -2094,7 +2151,7 @@ function wizHtml() {
   } else if (st.review) {
     var yes = WIZ_NEEDS.filter(function (q) { return v.needs[q[0]]; }).map(function (q) { return (SECTIONS.find(function (s) { return s[0] === q[0]; }) || [, q[0]])[1]; });
     var line = function (step, k, val) { return '<button class="rv" data-a="wiz-go" data-v="' + step + '"><span class="k">' + esc(k) + '</span><span class="v">' + (val ? esc(val) : '<i>Not set</i>') + '</span><span class="e">Edit</span></button>'; };
-    body = '<div class="review">' + line(0, 'Name', v.title) + line(1, 'When', [fmtRange(v.starts_on, v.ends_on || v.starts_on), wizTime(v)].filter(Boolean).join(' · ')) + line(2, 'Where', [v.place, v.address].filter(Boolean).join(', ')) +
+    body = '<div class="review">' + line(0, 'Name', v.title) + line(1, 'When', [fmtRange(v.starts_on, v.ends_on || v.starts_on), wizTime(v)].filter(Boolean).join(' · ') + ((S.sess || []).length ? ': ' + S.sess.map(function (x) { return x.title; }).join(', ') : '')) + line(2, 'Where', [v.place, v.address].filter(Boolean).join(', ')) +
       line(3, 'Includes', yes.join(', ')) + (goalFields().length ? line(4, 'Goals', [v.needs.volunteers ? v.volunteer_goal + ' volunteers' : '', v.needs.guests && v.seats ? v.seats + ' seats a day' : '', v.needs.money && v.budget ? money(v.budget) + ' budget' : ''].filter(Boolean).join(' · ')) : '') +
       line(5, 'Share Page', v.about || v.contact_line ? [v.about, v.contact_line].filter(Boolean).join(' ') : '') + line(6, 'Heart', [v.theme, v.purpose].filter(Boolean).join(' · ')) + '</div>' +
       '<div class="card tip"><b>Ready To Share</b><p class="small muted">' + esc([v.needs.volunteers || v.needs.food ? 'A volunteer QR code' : '', v.needs.guests ? 'a guest RSVP QR code' : '', v.needs.followup ? 'a connection card QR code' : ''].filter(Boolean).join(', ').replace(/^a/, 'A') || 'Your event workspace') + ' will be set up with these details.' + (v.needs.volunteers ? ' Add specific spots like Parking or Greeters any time; until then people can sign up for the general volunteer team.' : '') + '</p></div>';
@@ -2106,7 +2163,7 @@ function wizHtml() {
 }
 function wizCreate() {
   var v = S.wiz.v, nd = v.needs;
-  var ev = { org_id: org().id, title: String(v.title).trim(), slug: slugFor(v.title), starts_on: v.starts_on, ends_on: v.ends_on || v.starts_on, time_label: wizTime(v), place: v.place || '', address: v.address || '',
+  var ev = { org_id: org().id, title: String(v.title).trim(), slug: slugFor(v.title), starts_on: v.starts_on, ends_on: v.ends_on || v.starts_on, start_time: v.start_time || null, end_time: v.end_time || null, sessions: S.sess || [], time_label: wizTime(v), place: v.place || '', address: v.address || '',
     about: v.about || '', contact_line: v.contact_line || '', theme: v.theme || '', purpose: v.purpose || '', giving_link: nd.money ? v.giving_link || '' : (org().giving_link || ''), budget: nd.money ? num(v.budget) : 0, is_open: v.is_open !== false,
     volunteer_goal: nd.volunteers ? Math.max(0, Math.min(10000, v.volunteer_goal || 0)) : 0, notes: '',
     sections: WIZ_NEEDS.filter(function (q) { return nd[q[0]]; }).map(function (q) { return q[0]; }).concat(['v2']) };
@@ -2114,7 +2171,9 @@ function wizCreate() {
     var adds = [], days = [], d = r.starts_on, tl = r.time_label.replace(/^Nightly, /, '');
     while (d && d <= r.ends_on && days.length < 14) { days.push(d); d = addDays(d, 1); }
     if (nd.volunteers && r.volunteer_goal) adds.push({ event_id: r.id, kind: 'serve', title: 'Volunteer Team', on_date: null, time_label: '', needed: Math.min(5000, r.volunteer_goal), notes: 'Serve wherever you’re needed. The team will reach out with details.', sort: 0 });
-    if (nd.guests) days.forEach(function (x, i) { adds.push({ event_id: r.id, kind: 'attend', title: days.length > 1 ? 'Night ' + (i + 1) : 'RSVP', on_date: x, time_label: tl, needed: Math.max(1, Math.min(5000, v.seats || 200)), notes: '', sort: 10 + i }); });
+    var ss = r.sessions || [], seats = Math.max(1, Math.min(5000, v.seats || 200));
+    if (nd.guests && ss.length) ss.forEach(function (x, i) { adds.push({ event_id: r.id, kind: 'attend', title: x.title, on_date: x.on_date || r.starts_on, time_label: sessTime(x), start_time: x.start || null, end_time: x.end || null, needed: seats, notes: '', sort: 10 + i }); });
+    else if (nd.guests) days.forEach(function (x, i) { adds.push({ event_id: r.id, kind: 'attend', title: days.length > 1 ? 'Night ' + (i + 1) : 'RSVP', on_date: x, time_label: tl, needed: Math.max(1, Math.min(5000, v.seats || 200)), notes: '', sort: 10 + i }); });
     return adds.reduce(function (p, it) { return p.then(function () { return DB.save('ed_items', it).then(function (row) { put('ed_items', row); }); }); }, Promise.resolve()).then(function () { closeSheet(); S.wiz = null; openEvent(r.id); });
   }).catch(function () {});
 }
@@ -2326,6 +2385,8 @@ var A = {
   'dir-edit': function (t, id) { var tb = t.getAttribute('data-t'); editDir(tb, byId(tb, id)); },
   // events
   'new-event': function () { newEventWizard(); },
+  'sess-add': function () { sessRead(); var v = S.sess, last = v[v.length - 1], d = $('#layer [name="starts_on"]'); v.push({ id: uuid(), title: '', on_date: (last && last.on_date) || (d && d.value) || '', start: '', end: '' }); $('#sess_box').innerHTML = sessBox(); var n = $$('#sess_box [data-sess="title"]'); if (n.length) n[n.length - 1].focus(); },
+  'sess-del': function (t, id) { sessRead(); S.sess.splice(+id, 1); $('#sess_box').innerHTML = sessBox(); },
   'wiz-next': function () { wizMove(1); },
   'wiz-back': function () { wizMove(-1); },
   'wiz-yn': function (t, id) { wizKeep(); S.wiz.v.needs[id] = t.getAttribute('data-v') === '1'; S.wiz.err = ''; S.sheet.err = ''; redrawSheet(); },
