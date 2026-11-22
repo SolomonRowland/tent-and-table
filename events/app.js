@@ -473,7 +473,7 @@ function sheetFoot(del, saveLabel) {
 /* Edit any row with a field list. opts: title, sub, top (html above the form), required, prep(row) -> row, after(saved) */
 function editRow(t, rec, fields, opts) {
   opts = opts || {};
-  var base = rec || opts.base || {};
+  var base = rec || opts.base || {}, newId = rec ? null : uuid();
   openSheet(function () {
     return '<h3>' + esc(opts.title || (rec ? 'Edit' : 'Add')) + '</h3>' + (opts.sub ? '<p class="lead">' + esc(opts.sub) + '</p>' : '') + (opts.top ? opts.top(base) : '') + formBody(fields, base) + sheetFoot(!!rec && opts.del !== false, opts.saveLabel);
   }, function () {
@@ -482,6 +482,7 @@ function editRow(t, rec, fields, opts) {
     if (!String(getPath(v, req) == null ? '' : getPath(v, req)).trim()) { sheetErr('Please fill in ' + (fields.find(function (f) { return f.k === req; }) || {}).label + '.'); return; }
     refSync(v);
     if (opts.prep) { var m = opts.prep(v); if (typeof m === 'string') { sheetErr(m); return; } if (m) v = m; }
+    if (newId && !v.id) v.id = newId;
     return save(t, v).then(function (r) { closeSheet(); if (opts.after) opts.after(r); render(); }).catch(function () {});
   }, { del: rec ? function () { ask(opts.delMsg || 'Delete this?', 'Delete', function () { return remove(t, rec.id).then(function () { render(); }); }, opts.delSub); } : null, after: opts.afterDraw });
 }
@@ -1457,6 +1458,8 @@ function attention(e) {
   }
   if (on('vendors')) { var q = evRows('ed_event_vendors').filter(function (v) { return v.status === 'Quoted'; }); if (q.length) out.push(['amber', plural(q.length, 'Vendor') + ' Not Booked Yet', q.map(function (v) { return (byId('ed_vendors', v.vendor_id) || {}).name; }).join(', '), 'vendors']); }
   if (on('volunteers') && num(e.volunteer_goal) && volCount() < num(e.volunteer_goal)) out.push([num(e.volunteer_goal) - volCount() > num(e.volunteer_goal) / 4 ? 'red' : 'amber', (num(e.volunteer_goal) - volCount()) + ' Volunteers Short Of Your Goal', volCount() + ' of ' + num(e.volunteer_goal) + ' so far. Share the volunteer link.', 'volunteers']);
+  if (!ended) { var tr = evRows('ed_event_people').filter(function (p) { return travelGaps(p).length; });
+    if (tr.length) out.push(['amber', plural(tr.length, 'Guest') + ' Still ' + (tr.length === 1 ? 'Needs' : 'Need') + ' Travel Or A Place To Stay', tr.map(function (p) { return ((byId('ed_people', p.person_id) || {}).name || 'Someone') + ': ' + travelGaps(p).join(', ').toLowerCase(); }).join(' · '), 'people']); }
   if (on('speakers') || on('volunteers')) {
     var sp = evRows('ed_event_people').filter(function (p) { return p.team === 'speaker' && (p.details || {}).status === 'Invited'; });
     if (sp.length && on('speakers')) out.push(['amber', plural(sp.length, 'Speaker') + ' Not Confirmed', sp.map(function (p) { return (byId('ed_people', p.person_id) || {}).name; }).join(', '), 'people']);
@@ -2163,7 +2166,8 @@ function wizHtml() {
 }
 function wizCreate() {
   var v = S.wiz.v, nd = v.needs;
-  var ev = { org_id: org().id, title: String(v.title).trim(), slug: slugFor(v.title), starts_on: v.starts_on, ends_on: v.ends_on || v.starts_on, start_time: v.start_time || null, end_time: v.end_time || null, sessions: S.sess || [], time_label: wizTime(v), place: v.place || '', address: v.address || '',
+  S.wiz.ids = S.wiz.ids || { ev: uuid(), slug: slugFor(v.title), items: [] };
+  var ev = { id: S.wiz.ids.ev, org_id: org().id, title: String(v.title).trim(), slug: S.wiz.ids.slug, starts_on: v.starts_on, ends_on: v.ends_on || v.starts_on, start_time: v.start_time || null, end_time: v.end_time || null, sessions: S.sess || [], time_label: wizTime(v), place: v.place || '', address: v.address || '',
     about: v.about || '', contact_line: v.contact_line || '', theme: v.theme || '', purpose: v.purpose || '', giving_link: nd.money ? v.giving_link || '' : (org().giving_link || ''), budget: nd.money ? num(v.budget) : 0, is_open: v.is_open !== false,
     volunteer_goal: nd.volunteers ? Math.max(0, Math.min(10000, v.volunteer_goal || 0)) : 0, notes: '',
     sections: WIZ_NEEDS.filter(function (q) { return nd[q[0]]; }).map(function (q) { return q[0]; }).concat(['v2']) };
@@ -2174,6 +2178,7 @@ function wizCreate() {
     var ss = r.sessions || [], seats = Math.max(1, Math.min(5000, v.seats || 200));
     if (nd.guests && ss.length) ss.forEach(function (x, i) { adds.push({ event_id: r.id, kind: 'attend', title: x.title, on_date: x.on_date || r.starts_on, time_label: sessTime(x), start_time: x.start || null, end_time: x.end || null, needed: seats, notes: '', sort: 10 + i }); });
     else if (nd.guests) days.forEach(function (x, i) { adds.push({ event_id: r.id, kind: 'attend', title: days.length > 1 ? 'Night ' + (i + 1) : 'RSVP', on_date: x, time_label: tl, needed: Math.max(1, Math.min(5000, v.seats || 200)), notes: '', sort: 10 + i }); });
+    adds.forEach(function (it, i) { it.id = S.wiz.ids.items[i] = S.wiz.ids.items[i] || uuid(); });
     return adds.reduce(function (p, it) { return p.then(function () { return DB.save('ed_items', it).then(function (row) { put('ed_items', row); }); }); }, Promise.resolve()).then(function () { closeSheet(); S.wiz = null; openEvent(r.id); });
   }).catch(function () {});
 }
@@ -2364,7 +2369,15 @@ function toggle(t, id, field, valFn) {
 }
 var A = {
   close: closeSheet,
-  'sheet-save': function () { if (S.sheet && S.sheet.save) { var p = S.sheet.save(); if (p && p.catch) p.catch(function () {}); } },
+  // One save at a time: a second tap while the first is still going is ignored, so nothing is ever created twice.
+  'sheet-save': function () {
+    var sh = S.sheet; if (!sh || !sh.save || sh.saving || S.busy) return;
+    var p = sh.save(); if (!p || !p.then) return;
+    var mark = function (on) { $$('#layer .sheet [data-a="sheet-save"]').forEach(function (b) { b.disabled = on; b.classList.toggle('saving', on); }); };
+    sh.saving = true; mark(true);
+    var done = function () { sh.saving = false; if (S.sheet === sh) mark(false); };
+    p.then(done, done);
+  },
   'sheet-del': function () { if (S.sheet && S.sheet.del) S.sheet.del(); },
   nav: function (t) { S.tab = t.getAttribute('data-v'); if (S.ev) { closeEvent(); return; } render(); window.scrollTo(0, 0); },
   'auth-via': function (t) { S.authVia = t.getAttribute('data-v'); S.authMsg = ''; S.otpPhone = ''; render(); },
@@ -2555,6 +2568,7 @@ var A = {
 if (window.MAIL_ACTIONS) Object.assign(A, MAIL_ACTIONS);
 document.addEventListener('submit', function (ev) {
   var f = ev.target, k = f.getAttribute('data-form'); if (!k) return; ev.preventDefault();
+  if (S.busy) return; // already sending this form
   var v = {}; new FormData(f).forEach(function (val, key) { if (key === 'r') (v.r = v.r || []).push(val); else v[key] = String(val).trim(); });
   S.formKeep = { k: k, v: Object.assign({}, v) }; // so a redraw (an error, a busy state) never erases what someone typed
   if (k === 'auth') {
@@ -2574,10 +2588,11 @@ document.addEventListener('submit', function (ev) {
       DB.verifyCode(S.otpPhone, code).then(function (u) { S.user = u; S.otpPhone = ''; S.loading = true; return loadAcct(); }, function (e) { S.authMsg = otpErr(e); }).then(function () { S.busy = false; render(); });
     }
   } else if (k === 'create-org') {
+    S.busy = true; f.querySelectorAll('button[type="submit"]').forEach(function (b) { b.disabled = true; b.classList.add('saving'); });
     DB.rpc('ed_create_org', { p_name: v.name, p_display: v.me }).then(function (oid) {
       // the two optional extras; if either can't be saved the account still opens and they can be added in Settings
       return Promise.all([v.phone && oid ? DB.updateMe(oid, { phone: v.phone }).catch(function () {}) : null, v.tax_id && oid ? DB.updateOrg(oid, { tax_id: v.tax_id }).catch(function () {}) : null]);
-    }).then(loadAcct).catch(function (e) { S.authMsg = errMsg(e); render(); });
+    }).then(loadAcct).catch(function (e) { S.authMsg = errMsg(e); }).then(function () { S.busy = false; render(); });
   } else if (k === 'join') {
     if (!v.code) { S.authMsg = 'Paste the code from your invite link.'; render(); return; }
     DB.rpc('ed_accept_invite', { p_code: v.code.replace(/^.*join=/, ''), p_display: v.me }).then(function () { lset('ed.join', null); return loadAcct(); }).catch(function (e) { S.authMsg = errMsg(e); render(); });

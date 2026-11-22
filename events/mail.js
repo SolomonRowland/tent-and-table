@@ -23,9 +23,9 @@ function mailHtml(tpl, d) {
   var logo = function (h, light) { return o.logo ? '<img src="' + mailEsc(o.logo) + '" alt="' + mailEsc(o.name) + '" height="' + h + '" style="height:' + h + 'px;width:auto;max-width:220px;border:0;display:inline-block;border-radius:8px">' : '<span style="' + serif + 'font-size:22px;font-weight:bold;color:' + (light ? '#ffffff' : MAIL_INK) + '">' + mailEsc(o.name) + '</span>'; };
   var btn = function (dark) { return d.button && d.url ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:8px auto 4px"><tr><td align="center" bgcolor="' + (dark ? MAIL_INK : MAIL_RED) + '" style="border-radius:999px"><a href="' + mailEsc(d.url) + '" style="display:inline-block;padding:14px 34px;' + sans + 'font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:999px">' + mailEsc(d.button) + '</a></td></tr></table>' : ''; };
   var details = function () {
-    var r = [['When', [e.when, e.time].filter(Boolean).join(' · ')], ['Where', [e.where, e.address].filter(Boolean).join(', ')]].filter(function (x) { return x[1]; });
+    var r = [['When', [e.when, e.time].filter(Boolean).join(' · ')], ['Sessions', (e.sessions || []).slice(0, 12).join('\n')], ['Where', [e.where, e.address].filter(Boolean).join(', ')]].filter(function (x) { return x[1]; });
     return r.length ? '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FCF3F3;border-radius:12px;margin:6px 0 20px">' + r.map(function (x, i) {
-      return '<tr><td style="padding:' + (i ? '0' : '14px') + ' 18px ' + (i === r.length - 1 ? '14px' : '10px') + ';' + sans + 'font-size:15px;line-height:1.45;color:' + MAIL_INK + '"><span style="display:block;font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;color:' + MAIL_RED + '">' + x[0] + '</span>' + mailEsc(x[1]) + '</td></tr>';
+      return '<tr><td style="padding:' + (i ? '0' : '14px') + ' 18px ' + (i === r.length - 1 ? '14px' : '10px') + ';' + sans + 'font-size:15px;line-height:1.45;color:' + MAIL_INK + '"><span style="display:block;font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;color:' + MAIL_RED + '">' + x[0] + '</span>' + mailEsc(x[1]).replace(/\n/g, '<br>') + '</td></tr>';
     }).join('') + '</table>' : '';
   };
   var img = function (u, w) { return '<img src="' + mailEsc(u) + '" alt="" width="' + w + '" style="width:100%;max-width:' + w + 'px;height:auto;display:block;border:0;border-radius:10px">'; };
@@ -70,7 +70,7 @@ function mailHtml(tpl, d) {
 
 /* ---------------------------------------------------------------- what goes in, from the event */
 function mailEvData(e) {
-  return { title: e.title, when: fmtRange(e.starts_on, e.ends_on), time: e.time_label || '', where: e.place || '', address: e.address || '', start: e.starts_on || '' };
+  return { title: e.title, when: fmtRange(e.starts_on, e.ends_on), time: e.time_label || '', sessions: (e.sessions || []).map(function (x) { return x.title + ': ' + sessWhen(x); }), where: e.place || '', address: e.address || '', start: e.starts_on || '' };
 }
 function mailLink(e, k) {
   if (k === 'give') return e.giving_link || (org() || {}).giving_link || '';
