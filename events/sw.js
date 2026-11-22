@@ -1,5 +1,5 @@
 /* Tent & Table: keep the app shell available offline. Data comes from the network; the app keeps its own copy for no-signal use. */
-var CACHE = 'tent-table-v41';
+var CACHE = 'tent-table-v42';
 var SHELL = ['./', './index.html', './qrcode.js', './data.js', './mail.js', './app.js', '../home/supabase.js', './icon.svg', './manifest.webmanifest'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); })); });
 self.addEventListener('activate', function (e) { e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); })); }).then(function () { return self.clients.claim(); })); });

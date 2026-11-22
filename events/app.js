@@ -470,21 +470,55 @@ function readForm(fields, base) {
 function sheetFoot(del, saveLabel) {
   return '<div class="acts">' + (del ? '<button class="btn ghost" data-a="sheet-del">Delete</button>' : '') + '<span class="grow"></span><button class="btn plain" data-a="close">Cancel</button><button class="btn" data-save data-a="sheet-save">' + esc(saveLabel || 'Save') + '</button></div>';
 }
-/* Edit any row with a field list. opts: title, sub, top (html above the form), required, prep(row) -> row, after(saved) */
+/* A saved record opens as a short summary of what's filled in; Edit shows every field. */
+function fieldShow(f, data) {
+  var v = getPath(data || {}, f.k);
+  if (f.type === 'check') return v ? '✓' : '';
+  if (v == null || v === '' || (Array.isArray(v) && !v.length)) return f.viewDef || '';
+  if (f.type === 'money') return num(v) ? money(num(v)) : '';
+  if (f.type === 'date') return fmtLong(v);
+  if (f.type === 'time') return fmtTime(v);
+  if (f.type === 'select') { var o = optsOf(f).find(function (x) { return String(x[0]) === String(v); }); return o ? String(o[1]) : String(v); }
+  if (f.type === 'multi') return v.join(', ');
+  if (f.type === 'contact') { var c = refContact(v); return c ? c.name : ''; }
+  if (f.type === 'contacts') return refNames(v).join(', ');
+  return String(v);
+}
+function recView(fields, data, skip) {
+  var rows = [], checks = [];
+  fields.forEach(function (f) {
+    if (f.html) { if (f.view) { var h = f.view(data); if (h) rows.push(h); } return; }
+    if (f.drawn || f.noView || f.k === skip) return;
+    var t = fieldShow(f, data); if (!t) return;
+    if (f.type === 'check') checks.push(f.label); else rows.push('<div class="rv-row"><dt>' + esc(f.label) + '</dt><dd>' + esc(t).replace(/\n/g, '<br>') + '</dd></div>');
+  });
+  if (checks.length) rows.push('<div class="rv-row"><dt>Checked</dt><dd>' + checks.map(function (c) { return '<span class="rv-check">' + esc(c) + '</span>'; }).join('') + '</dd></div>');
+  return rows.length ? '<dl class="recview">' + rows.join('') + '</dl>' : '<div class="empty card">Nothing filled in yet. Tap Edit to add details.</div>';
+}
+
+/* Edit any row with a field list. opts: title, sub, top (html above the form), required, prep(row) -> row, after(saved), view (open saved records as a summary) */
 function editRow(t, rec, fields, opts) {
   opts = opts || {};
-  var base = rec || opts.base || {}, newId = rec ? null : uuid();
+  var base = rec || opts.base || {}, newId = rec ? null : uuid(), canView = !!(rec && opts.view);
   openSheet(function () {
-    return '<h3>' + esc(opts.title || (rec ? 'Edit' : 'Add')) + '</h3>' + (opts.sub ? '<p class="lead">' + esc(opts.sub) + '</p>' : '') + (opts.top ? opts.top(base) : '') + formBody(fields, base) + sheetFoot(!!rec && opts.del !== false, opts.saveLabel);
+    var head = '<h3>' + esc(opts.title || (rec ? 'Edit' : 'Add')) + '</h3>' + (opts.sub ? '<p class="lead">' + esc(opts.sub) + '</p>' : '') + (opts.top ? opts.top(base) : '');
+    if (S.sheet && S.sheet.viewMode) return head + recView(fields, base, opts.viewSkip) + '<div class="acts"><span class="grow"></span><button class="btn plain" data-a="close">Done</button><button class="btn" data-a="rec-edit">Edit</button></div>';
+    return head + formBody(fields, base) + sheetFoot(!!rec && opts.del !== false, opts.saveLabel);
   }, function () {
+    if (S.sheet.viewMode) return;
     var v = readForm(fields, base);
     var req = opts.required || fields[0].k;
     if (!String(getPath(v, req) == null ? '' : getPath(v, req)).trim()) { sheetErr('Please fill in ' + (fields.find(function (f) { return f.k === req; }) || {}).label + '.'); return; }
     refSync(v);
     if (opts.prep) { var m = opts.prep(v); if (typeof m === 'string') { sheetErr(m); return; } if (m) v = m; }
     if (newId && !v.id) v.id = newId;
-    return save(t, v).then(function (r) { closeSheet(); if (opts.after) opts.after(r); render(); }).catch(function () {});
-  }, { del: rec ? function () { ask(opts.delMsg || 'Delete this?', 'Delete', function () { return remove(t, rec.id).then(function () { render(); }); }, opts.delSub); } : null, after: opts.afterDraw });
+    var sh = S.sheet;
+    return save(t, v).then(function (r) {
+      // a saved record goes back to its summary, now showing what was just filled in
+      if (canView && !opts.after && S.sheet === sh) { rec = base = r; sh.viewMode = true; redrawSheet(); render(); var el = $('#layer .sheet'); if (el) el.scrollTop = 0; return; }
+      closeSheet(); if (opts.after) opts.after(r); render();
+    }).catch(function () {});
+  }, { viewMode: canView, del: rec ? function () { ask(opts.delMsg || 'Delete this?', 'Delete', function () { return remove(t, rec.id).then(function () { render(); }); }, opts.delSub); } : null, after: opts.afterDraw });
 }
 
 /* ================================================================ sessions (an event can have several gatherings, each with its own times) */
@@ -523,6 +557,10 @@ function travelGaps(a) { var d = (a && a.details) || {}; return TRAVEL.filter(fu
 function travelSet(a) { var d = (a && a.details) || {}; return TRAVEL.filter(function (t) { return d[t[0] + '_need'] && d[t[0] + '_ok']; }).map(function (t) { return t[1]; }); }
 function travelPills(a) { return travelGaps(a).map(function (x) { return pill('Needs ' + x, 'red'); }).concat(travelSet(a).map(function (x) { return pill(x + ' Set', 'green'); })).join(''); }
 // Travel and stay as one compact table: a row per item with Needed and Done side by side.
+function travelView(data) {
+  var d = (data && data.details) || {}, l = TRAVEL.filter(function (t) { return d[t[0] + '_need']; });
+  return l.length ? '<div class="rv-row"><dt>Travel And Stay</dt><dd>' + l.map(function (t) { return pill(t[1] + (d[t[0] + '_ok'] ? ' · Done' : ' · Needed'), d[t[0] + '_ok'] ? 'green' : 'red'); }).join(' ') + '</dd></div>' : '';
+}
 function travelTable(data) {
   var d = (data && data.details) || {}, box = function (k, lbl, t) { return '<label class="tv-box"><input type="checkbox" name="details.' + k + '"' + (d[k] ? ' checked' : '') + ' aria-label="' + esc(lbl + ': ' + t) + '"><span>' + esc(t) + '</span></label>'; };
   return '<div class="fld"><label>Travel And Stay</label><span class="hint">Tick what they need, then tick Done once it’s taken care of.</span><div class="tvtable">' + TRAVEL.map(function (t) {
@@ -621,9 +659,9 @@ var F_ASSIGN = {
   person: function (team) {
     var f = [{ k: 'team', label: 'Team', type: 'select', opts: TEAMS, half: true }, { k: 'role', label: 'Role At This Event', type: 'list', opts: TITLES, half: true }, { k: 'days', label: 'Days Serving', ph: 'All Nights' }];
     if (team === 'speaker') f = f.concat([
-      { k: 'details.status', label: 'Status', type: 'select', opts: ['Invited', 'Confirmed', 'Declined'], half: true }, { k: 'details.date', label: 'Speaking Date', type: 'date', half: true },
+      { k: 'details.status', label: 'Status', type: 'select', opts: ['Confirmed', 'Invited', 'Declined'], viewDef: 'Confirmed', half: true }, { k: 'details.date', label: 'Speaking Date', type: 'date', half: true },
       { k: 'details.time', label: 'Time', half: true, ph: '7:30 PM' }, { k: 'details.topic', label: 'Message', half: true }]);
-    if (team === 'speaker' || team === 'worship') f = f.concat([{ html: travelTable }]
+    if (team === 'speaker' || team === 'worship') f = f.concat([{ html: travelTable, view: travelView }]
       .concat(TRAVEL.reduce(function (l, t) { return l.concat([{ k: 'details.' + t[0] + '_need', label: t[2], type: 'check', drawn: true }, { k: 'details.' + t[0] + '_ok', label: t[3], type: 'check', drawn: true }]); }, []))
       .concat([{ k: 'details.arrive', label: 'Arrives', half: true, ph: 'Fri 2 PM, O’Hare' }, { k: 'details.depart', label: 'Leaves', half: true, ph: 'Sun 11 AM' },
         { k: 'details.travel', label: 'Travel Details', ph: 'Flight number, rental car, mileage, who’s driving' }, { k: 'details.lodging', label: 'Hotel Details', ph: 'Hotel name, confirmation number, nights' },
@@ -921,7 +959,7 @@ function newContact(type, after) {
 var DIRFORM = { ed_people: ['person', 'Contact'], ed_vendors: ['vendor', 'Vendor'], ed_contacts: ['contact', 'Contact'], ed_equipment: ['equipment', 'Equipment'], ed_budget: ['budget', 'Budget Line'] };
 function editDir(t, rec, after) {
   var d = DIRFORM[t];
-  editRow(t, rec, F[d[0]], { title: (rec ? 'Edit ' : 'Add ') + d[1], base: rec ? null : t === 'ed_people' ? { org_id: org().id, status: 'current', groups: S.newGroups || [] } : { org_id: org().id },
+  editRow(t, rec, F[d[0]], { title: rec ? rec.name || d[1] : 'Add ' + d[1], view: /^ed_(people|vendors|contacts)$/.test(t), viewSkip: 'name', top: rec && t !== 'ed_equipment' && t !== 'ed_budget' ? function (b) { return S.sheet && S.sheet.viewMode ? actions(b) : ''; } : null, base: rec ? null : t === 'ed_people' ? { org_id: org().id, status: 'current', groups: S.newGroups || [] } : { org_id: org().id },
     prep: function (v) { v.org_id = org().id; if (t === 'ed_budget' && !v.event_id) v.event_id = null; if (t === 'ed_equipment') v.quantity = Math.max(0, v.quantity || 0); return v; },
     after: after, delMsg: t === 'ed_equipment' ? 'Delete this from your equipment?' : t === 'ed_budget' ? 'Delete this budget line?' : 'Delete this contact?', delSub: rec && usedIn(t, rec.id).length ? 'It will also be removed from every event that uses it.' : '' });
 }
@@ -1975,7 +2013,7 @@ function editAssign(t, a) {
     ed_event_equipment: [F_ASSIGN.equipment, 'ed_equipment', a.equipment_id, 'Take this off the equipment list?']
   }[t];
   var src = byId(cfg[1], cfg[2]) || {}, team = t === 'ed_event_people' ? (TEAMS.find(function (x) { return x[0] === a.team; }) || [, 'Team'])[1] : '';
-  editRow(t, a, cfg[0], { title: { ed_event_people: team, ed_event_vendors: 'Vendor For This Event', ed_event_contacts: 'Contact For This Event', ed_event_equipment: 'Equipment For This Event' }[t] || 'This Event', top: assignTop(cfg[1], cfg[2]), required: cfg[0][0].k, delMsg: cfg[3], prep: function (v) {
+  editRow(t, a, cfg[0], { title: { ed_event_people: team, ed_event_vendors: 'Vendor For This Event', ed_event_contacts: 'Contact For This Event', ed_event_equipment: 'Equipment For This Event' }[t] || 'This Event', top: assignTop(cfg[1], cfg[2]), required: cfg[0][0].k, view: t !== 'ed_event_equipment', delMsg: cfg[3], prep: function (v) {
     if (t === 'ed_event_vendors' && v.pay_status === 'Paid In Full') v.paid = v.cost;
     if (t === 'ed_event_equipment') { v.quantity = Math.max(1, v.quantity || 1); }
     return v;
@@ -2383,6 +2421,7 @@ function toggle(t, id, field, valFn) {
 var A = {
   close: closeSheet,
   // One save at a time: a second tap while the first is still going is ignored, so nothing is ever created twice.
+  'rec-edit': function () { if (!S.sheet) return; S.sheet.viewMode = false; redrawSheet(); var el = $('#layer .sheet'); if (el) el.scrollTop = 0; },
   'sheet-save': function () {
     var sh = S.sheet; if (!sh || !sh.save || sh.saving || S.busy) return;
     var p = sh.save(); if (!p || !p.then) return;
@@ -2482,7 +2521,7 @@ var A = {
   'edit-item': function (t, id) { var it = byId('ed_items', id); editRow('ed_items', it, itemFields(it.kind), { title: it.kind === 'meal' ? 'Edit Meal' : it.kind === 'attend' ? 'Edit Service' : 'Edit Shift', prep: function (v) { if (v.kind === 'serve' && (v.start_time || v.end_time)) v.time_label = timeRange(v.start_time, v.end_time); v.needed = Math.max(1, Math.min(5000, v.needed || 1)); return v; }, delMsg: 'Delete this spot?', delSub: signups(id).length ? 'The ' + plural(signups(id).length, 'person', 'people') + ' signed up will be removed too.' : '' }); },
   'add-signup': function (t, id) { var it = byId('ed_items', id); editRow('ed_signups', null, suFields(it), { title: it.kind === 'attend' ? 'Add An RSVP' : it.kind === 'meal' ? 'Add A Dish' : 'Add A Volunteer', sub: it.title + (it.on_date ? ' · ' + fmtDay(it.on_date) : ''), base: { event_id: S.ev.id, item_id: id, checked_in_at: null, note: '', party: 1 }, prep: function (v) { v.party = Math.max(1, Math.min(50, v.party || 1)); return v; }, saveLabel: 'Add' }); },
   'del-signup': function (t, id) { var s = byId('ed_signups', id); ask('Remove ' + s.name + ' from this spot?', 'Remove', function () { return remove('ed_signups', id, 'Removed').then(render); }); },
-  'edit-signup': function (t, id) { var s = byId('ed_signups', id), it = s && byId('ed_items', s.item_id); if (!it) return; editRow('ed_signups', s, suFields(it), { title: it.kind === 'attend' ? 'Edit RSVP' : 'Edit Sign-Up', sub: it.title, del: false }); },
+  'edit-signup': function (t, id) { var s = byId('ed_signups', id), it = s && byId('ed_items', s.item_id); if (!it) return; editRow('ed_signups', s, suFields(it), { title: it.kind === 'attend' ? 'RSVP' : 'Sign-Up', sub: it.title, del: false, view: true }); },
   'pay-signup': function (t, id) { toggle('ed_signups', id, 'paid'); },
   checkin: function (t, id) { toggle('ed_signups', id, 'checked_in_at', function (r) { return r.checked_in_at ? null : new Date().toISOString(); }); },
   'vols-to-dir': function (t, kind) {
