@@ -26,7 +26,7 @@ You need the Supabase project the app already uses, plus an account with one or 
    supabase link --project-ref <PROJECT-REF>
    supabase secrets set RESEND_API_KEY=re_... NOTIFY_FROM_EMAIL="Grace Ministries <notices@graceministries.org>"
    supabase secrets set TWILIO_ACCOUNT_SID=AC... TWILIO_AUTH_TOKEN=... TWILIO_FROM=+15555550123
-   supabase secrets set CRON_SECRET=<any long random text> APP_URL=https://<where the app lives>/events/
+   supabase secrets set CRON_SECRET=<any long random text> APP_URL=https://<where the app lives>/
    supabase functions deploy ed-notify --no-verify-jwt
    ```
    Leave out the Twilio line if you're only sending email (or the Resend line for texts only). `--no-verify-jwt` is safe: the function checks the cron secret or the signed-in user itself.
