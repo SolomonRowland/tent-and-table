@@ -1,7 +1,7 @@
 -- Tent & Table database (version 19).
 -- Paste this whole file into Supabase: SQL Editor -> New query -> Run.
--- It is safe to run more than once. Every table starts with "ed_", so it can
--- share a Supabase project with Tend Home without touching Tend's data.
+-- It is safe to run more than once, and running it again never deletes data.
+-- Every table and function starts with "ed_".
 --
 -- How it fits together
 --   Ministry (ed_orgs) ── up to 10 logins (ed_members). One login belongs to one ministry.
@@ -15,7 +15,8 @@
 --     money: ed_offerings, ed_expenses (plus vendor and speaker costs on the assignments)
 --     follow-up: ed_cards (connection cards)
 --     prayer: ed_prayer (scripture, declarations and needs the prayer team intercedes for)
---   Public pages call only the ed_public, ed_sign, ed_unsign, ed_mine, ed_connect and ed_checkin functions.
+--   Public pages call only the ed_public, ed_sign, ed_unsign, ed_mine, ed_connect, ed_checkin, ed_guest
+--   and ed_unsubscribe functions. Visitors who aren't signed in can't read or change any table directly.
 
 -- ============================================================ accounts
 create table if not exists public.ed_orgs (
@@ -1012,3 +1013,6 @@ drop policy if exists ed_cal_own on public.ed_cal;
 create policy ed_cal_own on public.ed_cal for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid() and public.ed_is_member(org_id));
 grant select, insert, update, delete on public.ed_cal to authenticated;
+
+-- Small helpers the functions above use. Nobody needs to call them directly.
+revoke all on function public.ed_clip(text, int), public.ed_touch(), public.ed_login_phone() from public, anon, authenticated;

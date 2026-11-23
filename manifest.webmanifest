@@ -1,5 +1,7 @@
 {
+  "id": "./",
   "name": "Tent & Table",
+  "description": "Event sign-ups, RSVPs and planning for ministries.",
   "short_name": "Tent & Table",
   "start_url": "./",
   "scope": "./",

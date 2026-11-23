@@ -209,9 +209,9 @@ function boot() {
   if (m) { lset('ed.join', m[1]); try { history.replaceState(null, '', location.pathname); } catch (e) {} }
   if (/^#\/(e|c|v|r|k|u)\//.test(location.hash || '')) { route(); return; }
   // Coming back from Google: the session (or an error) arrives in the address. Read it, then tidy the address.
-  var back = /^#(access_token|error)=/.test(location.hash || ''), berr = /error_description=([^&]+)/.exec(location.hash || '');
+  var back = /^#(access_token|error)=/.test(location.hash || ''), recov = back && /type=recovery/.test(location.hash), berr = /error_description=([^&]+)/.exec(location.hash || '');
   if (berr) S.authMsg = decodeURIComponent(berr[1].replace(/\+/g, ' '));
-  DB.user().then(function (u) { if (back) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} } S.user = u; if (!u) { S.loading = false; render(); return; } return loadAcct(); })
+  DB.user().then(function (u) { if (back) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} } S.user = u; if (!u) { S.loading = false; render(); return; } return loadAcct().then(function () { if (recov && S.acct) { toast('You’re signed in. Choose a new password.'); A['change-pw'](); } }); })
     .catch(function (e) { if (useSnap(lget('ed.snap.last'))) { render(); return; } S.loading = false; S.authMsg = errMsg(e); render(); });
 }
 function loadAcct() {
@@ -2604,7 +2604,7 @@ var A = {
   'try-demo': function () { lset('ed.mode', 'demo'); location.reload(); },
   'leave-demo': function () { lset('ed.mode', null); location.href = location.pathname; },
   'reset-demo': function () { ask('Put the demo back to its starting data?', 'Reset Demo', function () { DB.reset(); S.ev = null; S.tab = 'home'; return loadAll().then(function () { render(); toast('Demo reset'); }); }); },
-  signout: function () { DB.signOut().then(function () { if (DB.mode === 'demo') { lset('ed.mode', null); location.href = location.pathname; return; } S.user = null; S.acct = null; S.db = {}; S.ev = null; render(); }); },
+  signout: function () { try { localStorage.removeItem(snapKey()); localStorage.removeItem('ed.snap.last'); } catch (e) {} DB.signOut().catch(function () {}).then(function () { if (DB.mode === 'demo') { lset('ed.mode', null); location.href = location.pathname; return; } S.user = null; S.acct = null; S.db = {}; S.ev = null; render(); }); },
   // directory
   'dir-tab': function (t) { S.dirTab = t.getAttribute('data-v'); S.dirQ = ''; S.dirCat = ''; render(); },
   'contact-new': function (t, id) { if (id) { newContact(id); return; } openSheet(function () {
