@@ -208,7 +208,7 @@ function boot() {
   var m = /[?&]join=([A-Za-z0-9]+)/.exec(location.search);
   if (m) { lset('ed.join', m[1]); try { history.replaceState(null, '', location.pathname); } catch (e) {} }
   if (/^#\/(e|c|v|r|k|u)\//.test(location.hash || '')) { route(); return; }
-  // Coming back from an email link: the session (or an error) arrives in the address. Read it, then tidy the address.
+  // Coming back from Google: the session (or an error) arrives in the address. Read it, then tidy the address.
   var back = /^#(access_token|error)=/.test(location.hash || ''), berr = /error_description=([^&]+)/.exec(location.hash || '');
   if (berr) S.authMsg = decodeURIComponent(berr[1].replace(/\+/g, ' '));
   DB.user().then(function (u) { if (back) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} } S.user = u; if (!u) { S.loading = false; render(); return; } return loadAcct(); })
@@ -728,6 +728,8 @@ var F_ASSIGN = {
 // Sign in with a texted code needs Supabase phone sign-in turned on with Twilio (a paid service).
 // Off for now: people sign in with email and a password. Set to true once phone sign-in is set up.
 var TEXT_SIGNIN = false;
+// Turn on once Google is set up in Supabase (Authentication, Sign In / Providers, Google).
+var GOOGLE_SIGNIN = false;
 function viewAuth() {
   var up = S.authMode === 'up', reset = S.authMode === 'reset';
   var intro = '<div class="auth"><div class="logo">' + IC.tent + '</div><h1>Tent &amp; Table</h1>' +
@@ -745,6 +747,7 @@ function viewAuth() {
       '<p class="small muted" style="margin-top:16px"><a href="#" data-a="auth-via" data-v="email">Use email and a password instead</a></p>' + demo;
   }
   return intro +
+    (GOOGLE_SIGNIN && !reset ? '<button class="btn plain block gbtn" data-a="auth-google"' + (S.busy ? ' disabled' : '') + '><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.2l7.9 6.2C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.2C1 16.6 0 20.2 0 24s1 7.4 2.7 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.2C6.6 42.6 14.6 48 24 48z"/></svg>Continue With Google</button><div class="ordiv"><span>or use email</span></div>' : '') +
     '<form data-form="auth" class="fgrid">' +
     '<div class="fld"><label for="a_email">Email</label><input class="inp" id="a_email" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email" enterkeyhint="next" required></div>' +
     (reset ? '' : '<div class="fld"><label for="a_pw">Password</label><input class="inp" id="a_pw" name="pw" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" minlength="8" enterkeyhint="go" required>' + (up ? '<span class="hint">At least 8 characters.</span>' : '') + '</div>') +
@@ -2469,6 +2472,7 @@ var A = {
   close: closeSheet,
   // One save at a time: a second tap while the first is still going is ignored, so nothing is ever created twice.
   'type-open': function () { if (!S.sheet) return; S.sheet.typeOpen = true; if (S.sheet.reflow) S.sheet.reflow(); },
+  'auth-google': function () { if (S.busy) return; S.authMsg = ''; S.busy = true; render(); DB.signInGoogle().catch(function (e) { S.busy = false; S.authMsg = errMsg(e); render(); }); },
   'rec-edit': function () { if (!S.sheet) return; S.sheet.viewMode = false; redrawSheet(); var el = $('#layer .sheet'); if (el) el.scrollTop = 0; },
   'sheet-save': function () {
     var sh = S.sheet; if (!sh || !sh.save || sh.saving || S.busy) return;
