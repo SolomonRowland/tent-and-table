@@ -1016,3 +1016,10 @@ grant select, insert, update, delete on public.ed_cal to authenticated;
 
 -- Small helpers the functions above use. Nobody needs to call them directly.
 revoke all on function public.ed_clip(text, int), public.ed_touch(), public.ed_login_phone() from public, anon, authenticated;
+
+-- Newer Supabase projects can be created without automatic table access. Say it outright, so the app
+-- (signed-in members) and the server functions (service_role) work either way. Row-level security above
+-- still decides which rows each member sees, and visitors who aren't signed in get no table access.
+grant usage on schema public to anon, authenticated, service_role;
+grant all on all tables in schema public to service_role;
+grant execute on all functions in schema public to service_role;
