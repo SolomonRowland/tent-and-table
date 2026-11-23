@@ -5,7 +5,7 @@ A phone-friendly web app for running a ministry's events, from the annual tent r
 - **Live app:** https://solomonrowland.github.io/tent-and-table/
 - **Try the demo:** https://solomonrowland.github.io/tent-and-table/?demo
 - **Database:** run `supabase/schema.sql` in Supabase's SQL Editor (safe to run again).
-- **Sign-in links:** in Supabase [URL Configuration](https://supabase.com/dashboard/project/vvfdhhbcvpgggfcusvqa/auth/url-configuration), the Site URL and a Redirect URL are both the live app link above, so confirmation, password-reset and Google sign-in links come back to the app.
+- **Sign-in links:** in Supabase [URL Configuration](https://supabase.com/dashboard/project/pxjqgsqzcychidgghvnt/auth/url-configuration), the Site URL and a Redirect URL are both the live app link above, so confirmation, password-reset and Google sign-in links come back to the app.
 
 On a phone, open the live app and add it to your home screen (iPhone: Safari > Share > Add to Home Screen; Android: Chrome > ⋮ > Install app). The site is served by GitHub Pages from the `main` branch. `events/` only forwards old links and QR codes to the app.
 
