@@ -38,6 +38,7 @@ function CloudDB() {
     mode: 'cloud', sb: sb,
     user: function () { return sb.auth.getSession().then(function (r) { me = r.data.session ? r.data.session.user : null; return me; }); },
     // Google sends the person back here with the session in the address; the client reads it on load.
+    fnUrl: function (name) { return CLOUD_URL + '/functions/v1/' + name; },
     signInGoogle: function () { return sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } }).then(function (r) { if (r.error) throw r.error; }); },
     signIn: function (e, p) { return sb.auth.signInWithPassword({ email: e, password: p }).then(function (r) { if (r.error) throw r.error; me = r.data.user; return me; }); },
     signUp: function (e, p) { return sb.auth.signUp({ email: e, password: p, options: { emailRedirectTo: location.origin + location.pathname } }).then(function (r) { if (r.error) throw r.error; me = r.data.session ? r.data.user : null; return me; }); },

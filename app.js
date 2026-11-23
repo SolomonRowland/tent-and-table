@@ -249,7 +249,8 @@ function loadAll() {
     S.db = {}; S.db.ed_events = r[0]; DIR_TABLES.forEach(function (t, i) { S.db[t] = r[i + 1]; });
     var ids = r[0].map(function (e) { return e.id; });
     return Promise.all(EVENT_TABLES.map(function (t) { return DB.listIn(t, 'event_id', ids); })).then(function (rr) { EVENT_TABLES.forEach(function (t, i) { S.db[t] = rr[i]; }); })
-      .then(function () { return DB.list('ed_mailings', 'org_id', oid).then(function (m) { S.db.ed_mailings = m; }, function () { S.db.ed_mailings = []; }); });
+      .then(function () { return DB.list('ed_mailings', 'org_id', oid).then(function (m) { S.db.ed_mailings = m; }, function () { S.db.ed_mailings = []; }); })
+      .then(function () { return DB.list('ed_cal', 'org_id', oid).then(function (c) { S.db.ed_cal = c; setTimeout(calSync, 1500); }, function () { S.db.ed_cal = []; }); });
   });
 }
 function refreshEvent() {
@@ -1252,6 +1253,7 @@ function viewSettings() {
     kv(S.user.phone && !S.user.email ? [['Phone', me.phone || prettyPhone(S.user.phone)], ['Signs In With', 'A text code to ' + prettyPhone(S.user.phone)]] : [['Phone', me.phone], ['Login Email', S.user.email || me.email]]) +
     (S.user.phone && !S.user.email ? '<p class="small muted">To change your sign-in number, sign out and sign in with the new number, then ask the account owner to invite it.</p>' : '<div class="btnrow"><button class="btn sm ghost" data-a="change-email">Change Login Email</button><button class="btn sm ghost" data-a="change-pw">Change Password</button></div>') + '</div>';
   var live = notifyLive(), chs = notifyChannels(), chLbl = chs.map(function (c) { return c === 'text' ? 'texts' : 'emails'; }).join(' and ');
+  h += accessSection(a, owner) + calSection();
   h += secHead('Notifications') + '<div class="card">' + (live
     ? '<div class="nstat on">' + IC.check + '<span><b>Automatic ' + esc(chLbl || 'notices') + ' are on.</b> They go out as things happen and each morning at 7.</span></div>' + '<div class="btnrow"><button class="btn sm ghost" data-a="notify-test">Send Me A Test</button></div>'
     : '<div class="nstat"><span><b>Automatic texts and emails aren’t on yet.</b> ' + (owner ? 'They need a sending service connected to your account (about 20 minutes, one time). The steps are in the setup guide.' : 'Your account owner can turn them on.') + ' Your choices below are saved for then. Until then, <button class="link inline" data-a="nav" data-v="mine">My Stuff</button> has reminders you can send in a tap.</span></div>') +
@@ -1263,15 +1265,6 @@ function viewSettings() {
   var lastBk = +lget('ed.backup.at') || 0;
   h += secHead('Back Up Your Data') + '<div class="card"><p class="small muted notenote">Download everything as spreadsheets (contacts, events, tasks, sign-ups, money, connection cards, prayer and more) plus a full copy, in one .zip file. Keep it somewhere safe; it has names, phone numbers and prayer requests.</p>' +
     '<div class="btnrow"><button class="btn sm" data-a="backup">Download A Backup</button><span class="small muted">' + (lastBk ? 'Last backup from this device: ' + esc(new Date(lastBk).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })) : 'No backup from this device yet.') + '</span></div></div>';
-  h += secHead('Team And Access', owner && a.members.length < 10 ? addBtn('Invite', 'invite') : '', a.members.length + ' of 10') +
-    '<div class="list">' + a.members.map(function (m) {
-      var self = m.user_id === S.user.id;
-      return row({ lead: avatar(m.name || m.email), title: esc(m.name || m.email) + (self ? ' <span class="muted small">(You)</span>' : ''), sub: esc([m.email, m.phone].filter(Boolean).join(' · ')), right: (m.role === 'owner' ? pill('Owner', 'red') : '') + (owner && !self ? '<button class="iconbtn sm" data-a="remove-member" data-id="' + esc(m.user_id) + '" aria-label="Remove ' + esc(m.name || m.email) + '">' + IC.close + '</button>' : '') });
-    }).join('') + '</div>' +
-    (a.invites.length ? '<div class="grouplbl">Open Invites</div><div class="list">' + a.invites.map(function (i) {
-      return '<div class="row"><div class="main"><div class="t">Invite Link</div><div class="urlbox">' + esc(inviteUrl(i.code)) + '</div></div><button class="link" data-a="copy" data-v="' + esc(inviteUrl(i.code)) + '">Copy</button><button class="link" data-a="cancel-invite" data-id="' + esc(i.code) + '">Cancel</button></div>';
-    }).join('') + '</div>' : '') +
-    '<p class="small muted">Each login belongs to one ministry. Someone who serves with another ministry signs up there with a different email.</p>';
   h += secHead('Help') + '<div class="list">' + row({ act: 'tour', id: 'x', lead: '<span class="avatar ic tone-red">' + IC.cal + '</span>', title: 'Watch The Quick Tour', sub: 'Two minutes on what Tent & Table does and how to plan your first event' }) + '</div>';
   h += secHead('Account') + '<div class="list">' +
     (DB.mode === 'demo' ? row({ act: 'reset-demo', id: 'x', title: 'Reset The Demo', sub: 'Put the sample ministry back the way it started' }) : '') +
@@ -1309,6 +1302,43 @@ function editProfile(fields, base, title, fn) {
     var v = readForm(fields, {}); if (!v[fields[0].k]) { sheetErr('Please fill in ' + fields[0].label + '.'); return; }
     return busy(fn(v), 'Saved').then(function () { closeSheet(); render(); }).catch(function () {});
   });
+}
+// Everyone and everything that can see this ministry's information, in one place.
+function accessSection(a, owner) {
+  var openEv = events().filter(function (e) { return e.is_open && (e.ends_on || e.starts_on || '9') >= TODAY; }), cal = calRow();
+  var h = secHead('Who Can See Your Workspace', owner && a.members.length < 10 ? addBtn('Invite', 'invite') : '', a.members.length + ' of 10') +
+    '<p class="small muted secnote">Only these logins can open your events, contacts, money and prayer requests.</p>' +
+    '<div class="list">' + a.members.map(function (m) {
+      var self = m.user_id === S.user.id, since = m.joined_at ? 'Joined ' + new Date(m.joined_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+      return row({ lead: avatar(m.name || m.email), title: esc(m.name || m.email) + (self ? ' <span class="muted small">(You)</span>' : ''), sub: esc([m.email, m.phone, since].filter(Boolean).join(' · ')), right: pill(m.role === 'owner' ? 'Owner' : 'Full Access', m.role === 'owner' ? 'red' : '') + (owner && !self ? '<button class="iconbtn sm" data-a="remove-member" data-id="' + esc(m.user_id) + '" aria-label="Remove ' + esc(m.name || m.email) + '">' + IC.close + '</button>' : '') });
+    }).join('') + '</div>' +
+    (a.invites.length ? '<div class="grouplbl">Invite Links Not Used Yet · ' + a.invites.length + '</div><p class="small muted">Anyone with one of these links can join. Cancel any you didn’t mean to share.</p><div class="list">' + a.invites.map(function (i) {
+      return '<div class="row"><div class="main"><div class="t">Invite Link</div><div class="urlbox">' + esc(inviteUrl(i.code)) + '</div></div><button class="link" data-a="copy" data-v="' + esc(inviteUrl(i.code)) + '">Copy</button>' + (owner ? '<button class="link" data-a="cancel-invite" data-id="' + esc(i.code) + '">Cancel</button>' : '') + '</div>';
+    }).join('') + '</div>' : '') +
+    '<div class="grouplbl">Public Links</div><div class="list">' +
+    row({ lead: '<span class="avatar ic tone-blue">' + IC.share + '</span>', title: openEv.length ? plural(openEv.length, 'event') + ' taking sign-ups' : 'No events taking sign-ups', sub: 'Anyone with a share link or QR code sees the event’s name, date, place and description, and the first names of volunteers. Never your contacts, money or prayer requests.' + (openEv.length ? ' ' + esc(openEv.slice(0, 3).map(function (e) { return e.title; }).join(', ')) + (openEv.length > 3 ? ' and more.' : '.') : '') }) +
+    (cal ? row({ act: 'cal-open', id: 'x', lead: '<span class="avatar ic tone-green">' + IC.cal + '</span>', title: 'Your calendar link', sub: 'Anyone with this link sees your event dates and your tasks. Reset it from Calendar if it was shared by mistake.' }) : '') +
+    '</div><p class="small muted">Each login belongs to one ministry. Someone who serves with another ministry signs up there with a different email.</p>';
+  return h;
+}
+function calSection() {
+  return secHead('Calendar') + '<div class="list">' + row({ act: 'cal-open', id: 'x', lead: '<span class="avatar ic tone-red">' + IC.cal + '</span>', title: calRow() ? 'Your Calendar Link Is On' : 'Add Events To Your Phone’s Calendar', sub: 'Every event and session, plus your tasks and the schedule items you lead. Updates on its own.' }) + '</div>';
+}
+function calSheet() {
+  var c = calRow(), url = calFeedUrl(c), web = url.replace(/^https?:/, 'webcal:');
+  openSheet(function () {
+    var st = S.calStatus;
+    return '<h3>Calendar</h3><p class="lead">Subscribe once and your phone’s calendar shows every event and session, your tasks and the schedule items you lead. Changes here show up there on their own, usually within an hour.</p>' +
+      (c && !url ? '<div class="card tip"><b>Not in the demo</b><p class="small muted">The demo can’t make a real calendar link. Download the file below to see how it looks.</p></div>' : '') +
+      (c && url ? '<a class="btn block" href="' + esc(web) + '">Add To My Calendar</a>' +
+        '<div class="fld" style="margin-top:12px"><label>Your Private Link</label><div class="urlbox">' + esc(url) + '</div><div class="btnrow"><button class="btn sm plain" data-a="copy" data-v="' + esc(url) + '">Copy Link</button><button class="btn sm plain" data-a="cal-reset">Reset Link</button><button class="btn sm plain" data-a="cal-off">Turn Off</button></div>' +
+        '<span class="hint">Google Calendar: Other calendars, then + and From URL, and paste the link. Keep it private: anyone with it can see your event dates and tasks.</span></div>' +
+        (st === 'bad' ? '<div class="card tip"><b>One-time setup needed</b><p class="small muted">The calendar link needs the ed-cal function in Supabase. The steps are in supabase/CALENDAR.md in your repository.</p></div>' : st === 'ok' ? '<p class="small" style="color:var(--green)">✓ Your link is working.</p>' : '')
+        : c ? '' : '<button class="btn block" data-a="cal-on">Turn On My Calendar Link</button>') +
+      '<div class="grouplbl">Or Download A File</div><p class="small muted">A one-time copy of every upcoming event and your tasks. It won’t update; download again after changes.</p><button class="btn sm ghost" data-a="cal-file">Download Calendar File</button>' +
+      '<div class="acts"><span class="grow"></span><button class="btn plain" data-a="close">Done</button></div>';
+  });
+  if (c && url && !S.calStatus) fetch(url, { method: 'GET' }).then(function (r) { S.calStatus = r.ok ? 'ok' : 'bad'; }, function () { S.calStatus = 'bad'; }).then(function () { if (S.sheet) redrawSheet(); });
 }
 function inviteUrl(code) { return location.origin + location.pathname + '?join=' + code; }
 
@@ -1483,9 +1513,77 @@ function prayerView(e, kind) {
     (list.length ? list.map(function (p) { return '<button class="card verse" data-a="edit-prayer" data-id="' + p.id + '">' + (p.body ? '<span class="verse-t">' + esc(p.body) + '</span>' : '') + '<span class="verse-r">' + esc(p.title) + '</span></button>'; }).join('')
       : '<div class="empty card">The verses this event stands on. Add the reference and the words, so the team can read them together.</div>');
 }
+/* ---------------------------------------------------------------- Bible verses
+   From bible-api.com: free, no account, public-domain translations only (NIV, ESV and NLT are licensed, so they aren't offered). */
+var BIBLE_TR = [['kjv', 'KJV · King James Version'], ['web', 'WEB · World English Bible'], ['bsb', 'BSB · Berean Standard Bible'], ['asv', 'ASV · American Standard Version'],
+  ['bbe', 'BBE · Bible in Basic English'], ['oeb-us', 'OEB · Open English Bible'], ['darby', 'Darby Translation'], ['dra', 'DRA · Douay-Rheims'], ['rv1909', 'RV 1909 · Reina-Valera (Español)']];
+function bibleTr() { var t = lget('ed.bible'); return BIBLE_TR.some(function (x) { return x[0] === t; }) ? t : 'kjv'; }
+function bibleAbbr(t) { return (BIBLE_TR.find(function (x) { return x[0] === t; }) || [t, t.toUpperCase()])[1].split(' · ')[0]; }
+function bibleSelect(id) { return '<select class="inp" id="' + id + '" aria-label="Translation">' + BIBLE_TR.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === bibleTr() ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select>'; }
+function bibleFetch(ref, tr) {
+  ref = String(ref || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+  if (!/\d/.test(ref)) return Promise.reject(new Error('Type a reference first, like John 3:16 or Psalm 23:1-3.'));
+  lset('ed.bible', tr);
+  return fetch('https://bible-api.com/' + encodeURIComponent(ref).replace(/%20/g, '+').replace(/%3A/gi, ':') + '?translation=' + encodeURIComponent(tr))
+    .then(function (r) { if (r.status === 429) throw new Error('Too many look-ups in a row. Wait half a minute and try again.'); return r.json(); }, function () { throw new Error('Can’t reach the Bible service right now. Check your connection.'); })
+    .then(function (j) {
+      if (!j || j.error || !j.verses || !j.verses.length) throw new Error('We couldn’t find that verse. Try a reference like John 3:16 or Psalm 23:1-3.');
+      var many = j.verses.length > 1, text = j.verses.map(function (v) { return (many ? v.verse + ' ' : '') + String(v.text).replace(/\s+/g, ' ').trim(); }).join(' ');
+      return { ref: j.reference, text: text, abbr: bibleAbbr(tr) };
+    });
+}
+function bibleTool() {
+  return '<div class="fld bibletool"><label for="bt_tr">Look It Up (Optional)</label><div class="bt-row">' + bibleSelect('bt_tr') + '<button type="button" class="btn sm ghost" data-a="bible-fill">Look Up</button></div>' +
+    '<span class="hint">Type the reference above, pick a translation, and the verse fills in.</span></div>';
+}
+
+/* ---------------------------------------------------------------- calendar
+   A private link the phone's calendar subscribes to (served by the ed-cal function), plus a one-time file download. */
+function calRow() { return (T('ed_cal') || []).find(function (c) { return S.user && c.user_id === S.user.id; }) || null; }
+function calFeedUrl(c) { return c && DB.fnUrl ? DB.fnUrl('ed-cal') + '?t=' + c.token : ''; }
+function calSync() {
+  // keeps "my tasks" in the feed pointed at the right contact
+  var c = calRow(); if (!c || DB.mode !== 'cloud') return;
+  var refs = myRefs(), names = myNames(), base = location.origin + location.pathname;
+  if (JSON.stringify([c.refs, c.names, c.base_url]) === JSON.stringify([refs, names, base])) return;
+  DB.save('ed_cal', Object.assign({}, c, { refs: refs, names: names, base_url: base })).then(function (r) { put('ed_cal', r); }, function () {});
+}
+function icsEsc(s) { return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/([,;])/g, '\\$1'); }
+function icsFold(line) { var out = '', l = line; while (l.length > 73) { out += l.slice(0, 73) + '\r\n '; l = l.slice(73); } return out + l; }
+function icsDay(d) { return String(d).replace(/-/g, ''); }
+function icsTime(d, t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return icsDay(d) + 'T' + (m ? ('0' + m[1]).slice(-2) + m[2] : '0000') + '00'; }
+// The same rules as the ed-cal function: sessions if the event has them, otherwise each day at the event's times, otherwise all-day.
+function icsBuild(calName, evs, extra) {
+  var L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Tent & Table//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:' + icsEsc(calName), 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
+  var stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  var add = function (uid, title, d, st, et, loc, desc) {
+    if (!d) return;
+    L.push('BEGIN:VEVENT', 'UID:' + uid + '@tent-and-table', 'DTSTAMP:' + stamp, 'SUMMARY:' + icsEsc(title));
+    if (st) { L.push('DTSTART:' + icsTime(d, st)); L.push('DTEND:' + (et && et > st ? icsTime(d, et) : icsTime(d, st).replace(/T(\d\d)/, function (m, h) { return 'T' + ('0' + Math.min(23, +h + 1)).slice(-2); }))); }
+    else { L.push('DTSTART;VALUE=DATE:' + icsDay(d), 'DTEND;VALUE=DATE:' + icsDay(addDays(typeof et === 'string' && /^\d{4}-/.test(et) ? et : d, 1))); }
+    if (loc) L.push('LOCATION:' + icsEsc(loc)); if (desc) L.push('DESCRIPTION:' + icsEsc(desc)); L.push('END:VEVENT');
+  };
+  evs.forEach(function (e) {
+    var loc = [e.place, e.address].filter(Boolean).join(', '), ss = e.sessions || [];
+    if (!e.starts_on) return;
+    if (ss.length) ss.forEach(function (x) { add('s-' + e.id + '-' + x.id, e.title + ': ' + x.title, x.on_date || e.starts_on, x.start, x.end, loc, e.about); });
+    else if (e.start_time) { for (var d = e.starts_on, n = 0; d <= (e.ends_on || e.starts_on) && n < 31; d = addDays(d, 1), n++) add('e-' + e.id + '-' + d, e.title, d, e.start_time, e.end_time, loc, e.about); }
+    else add('e-' + e.id, e.title, e.starts_on, null, e.ends_on || e.starts_on, loc, e.about);
+  });
+  (extra || []).forEach(function (x) { add(x.uid, x.title, x.d, x.st, x.et, x.loc, x.desc); });
+  L.push('END:VCALENDAR');
+  return L.map(icsFold).join('\r\n') + '\r\n';
+}
+function calMine() {
+  var s = stuffFor(myRefs(), myNames()), out = [];
+  s.tasks.forEach(function (x) { if (!x.t.done && x.t.due_on) out.push({ uid: 't-' + x.t.id, title: 'Task: ' + x.t.title + ' (' + x.e.title + ')', d: x.t.due_on, desc: x.t.notes }); });
+  s.lead.forEach(function (x) { if (x.kind === 'sched') out.push({ uid: 'c-' + x.x.id, title: x.x.title + ' (' + x.e.title + ')', d: x.x.on_date, st: x.x.start_time, et: x.x.end_time, loc: x.x.location, desc: x.x.notes }); });
+  return out;
+}
+
 function prayerFields(kind) {
   if (kind === 'declare') return [{ k: 'title', label: 'Declaration', type: 'textarea', auto: true, ph: 'The truth will come out, and the Lord will reveal Himself.' }];
-  if (kind === 'verse') return [{ k: 'title', label: 'Reference', auto: true, ph: 'Psalm 22:3' }, { k: 'body', label: 'Verse', type: 'textarea', ph: 'Yet you are holy, enthroned on the praises of Israel.' }];
+  if (kind === 'verse') return [{ k: 'title', label: 'Reference', auto: true, ph: 'Psalm 22:3' }, { html: bibleTool }, { k: 'body', label: 'Verse', type: 'textarea', ph: 'Yet you are holy, enthroned on the praises of Israel.' }];
   return [{ k: 'title', label: 'What We’re Praying For', auto: true, ph: 'Healing for her back' },
     { k: 'person_id', label: 'For (Optional)', type: 'select', opts: function () { return [['', 'No one in particular']].concat(T('ed_people').filter(function (p) { return p.status !== 'previous'; }).sort(function (x, y) { return x.name.localeCompare(y.name); }).map(function (p) { return [p.id, p.name]; })); }, hint: 'Pick someone from your contacts. Add them in Contacts first if they’re new.' },
     { k: 'body', label: 'Details', type: 'textarea', ph: 'What they asked for, and anything the team should know.' },
@@ -2473,6 +2571,21 @@ var A = {
   // One save at a time: a second tap while the first is still going is ignored, so nothing is ever created twice.
   'type-open': function () { if (!S.sheet) return; S.sheet.typeOpen = true; if (S.sheet.reflow) S.sheet.reflow(); },
   'auth-google': function () { if (S.busy) return; S.authMsg = ''; S.busy = true; render(); DB.signInGoogle().catch(function (e) { S.busy = false; S.authMsg = errMsg(e); render(); }); },
+  'bible-fill': function () {
+    var ref = $('#layer [name="title"]'), body = $('#layer [name="body"]'), tr = $('#bt_tr').value;
+    S.sheet.err = ''; refreshSheetErr();
+    busy(bibleFetch(ref.value, tr), '').then(function (v) { ref.value = v.ref + ' (' + v.abbr + ')'; body.value = v.text; }).catch(function (e) { sheetErr(e.message); });
+  },
+  'cal-open': function () { S.calStatus = ''; calSheet(); },
+  'cal-on': function () { busy(DB.save('ed_cal', { org_id: org().id, user_id: S.user.id, refs: myRefs(), names: myNames(), base_url: location.origin + location.pathname }), 'Calendar link is on').then(function (r) { put('ed_cal', r); S.calStatus = ''; calSheet(); render(); }).catch(function () {}); },
+  'cal-reset': function () { var c = calRow(); ask('Make a new calendar link?', 'Reset Link', function () { return DB.remove('ed_cal', c.id).then(function () { drop('ed_cal', c.id); return DB.save('ed_cal', { org_id: org().id, user_id: S.user.id, refs: myRefs(), names: myNames(), base_url: location.origin + location.pathname }); }).then(function (r) { put('ed_cal', r); toast('New link made. Subscribe again with it.'); S.calStatus = ''; calSheet(); render(); }); }, 'The old link stops working right away, so any calendar using it stops updating. Then add the new one to your calendar.'); },
+  'cal-off': function () { var c = calRow(); ask('Turn off your calendar link?', 'Turn Off', function () { return remove('ed_cal', c.id, 'Calendar link turned off').then(function () { render(); }); }, 'Calendars using it stop updating. You can turn it on again anytime.'); },
+  'cal-file': function () {
+    var evs = events().filter(function (e) { return (e.ends_on || e.starts_on || '0') >= addDays(TODAY, -30); });
+    var blob = new Blob([icsBuild(org().name + ' · Tent & Table', evs, calMine())], { type: 'text/calendar' }), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = (org().name || 'events').replace(/[^A-Za-z0-9]+/g, '-').toLowerCase() + '-calendar.ics'; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    toast('Calendar file downloaded. Open it to add the events.');
+  },
   'rec-edit': function () { if (!S.sheet) return; S.sheet.viewMode = false; redrawSheet(); var el = $('#layer .sheet'); if (el) el.scrollTop = 0; },
   'sheet-save': function () {
     var sh = S.sheet; if (!sh || !sh.save || sh.saving || S.busy) return;

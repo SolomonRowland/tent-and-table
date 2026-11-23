@@ -1,4 +1,4 @@
--- Tent & Table database (version 18).
+-- Tent & Table database (version 19).
 -- Paste this whole file into Supabase: SQL Editor -> New query -> Run.
 -- It is safe to run more than once. Every table starts with "ed_", so it can
 -- share a Supabase project with Tend Home without touching Tend's data.
@@ -423,7 +423,8 @@ create table if not exists public.ed_cards (
 );
 create index if not exists ed_cards_event_idx on public.ed_cards (event_id);
 
--- Upgrades from versions 12 to 18 (they come after every table above exists).
+-- Upgrades from versions 12 to 19 (they come after every table above exists).
+-- version 19: a private calendar link for each login (table ed_cal, at the end)
 -- version 18: details that depend on the contact type (speaker bio and travel, volunteer shirt size, guest church home...)
 alter table public.ed_people add column if not exists info jsonb not null default '{}'::jsonb;
 alter table public.ed_people drop constraint if exists ed_people_info_check;
@@ -991,3 +992,23 @@ begin
       using (bucket_id = 'ed-mail' and exists (select 1 from public.ed_members m where m.user_id = auth.uid() and m.org_id::text = (storage.foldername(name))[1]));
   end if;
 end $$;
+
+-- ============================================================ version 19: calendar link
+-- One private link per login. The phone's calendar fetches it (the ed-cal function); the token is the only key.
+-- refs and names say which contact is "you", so the feed can include your tasks and the schedule items you lead.
+create table if not exists public.ed_cal (
+  id uuid primary key default gen_random_uuid(),
+  token uuid not null unique default gen_random_uuid(),
+  org_id uuid not null references public.ed_orgs (id) on delete cascade,
+  user_id uuid not null unique references auth.users (id) on delete cascade,
+  refs text[] not null default '{}',
+  names text[] not null default '{}',
+  base_url text not null default '' check (length(base_url) <= 300),
+  created_at timestamptz not null default now()
+);
+alter table public.ed_cal enable row level security;
+revoke all on public.ed_cal from anon;
+drop policy if exists ed_cal_own on public.ed_cal;
+create policy ed_cal_own on public.ed_cal for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid() and public.ed_is_member(org_id));
+grant select, insert, update, delete on public.ed_cal to authenticated;

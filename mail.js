@@ -200,7 +200,7 @@ function mailSheet() {
     }).join('') + '</div><span class="hint">' + esc((MAIL_TPL.find(function (t) { return t[0] === m.template; }) || [])[2] || '') + '</span></fieldset>' +
     '<div class="fld"><label for="ml_subject">Subject Line</label><input class="inp" id="ml_subject" maxlength="150" value="' + esc(m.subject) + '"></div>' +
     '<div class="fld"><label for="ml_headline">Headline</label><input class="inp" id="ml_headline" maxlength="120" value="' + esc(m.fields.headline) + '"></div>' +
-    '<div class="fld"><label for="ml_message">Message</label><textarea class="inp" id="ml_message" rows="6" maxlength="4000">' + esc(m.fields.message) + '</textarea><span class="hint">Your heart for this event. It starts with what you wrote in the event’s theme and purpose.</span></div>' +
+    '<div class="fld"><label for="ml_message">Message</label><textarea class="inp" id="ml_message" rows="6" maxlength="4000">' + esc(m.fields.message) + '</textarea><div class="bt-row mailverse"><input class="inp" id="ml_vref" placeholder="Add a verse: John 3:16" aria-label="Verse to add" autocomplete="off">' + bibleSelect('ml_vtr') + '<button type="button" class="btn sm ghost" data-a="mail-verse">Add</button></div><span class="hint">Your heart for this event. It starts with what you wrote in the event’s theme and purpose.</span></div>' +
     '<div class="fld half"><label for="ml_button">Button Says</label><input class="inp" id="ml_button" maxlength="40" value="' + esc(m.fields.button) + '"></div>' +
     '<div class="fld half"><label for="ml_link">Button Opens</label><select class="inp" id="ml_link">' + MAIL_LINKS.map(function (l) { return '<option value="' + l[0] + '"' + ((m.fields.link || 'r') === l[0] ? ' selected' : '') + '>' + esc(l[1]) + '</option>'; }).join('') + '</select></div>' +
     '<fieldset class="fld"><legend>Photos (Up To 3)</legend><div class="mailphotos">' + ph.map(function (u, i) { return '<span class="mph"><img src="' + esc(u) + '" alt="Photo ' + (i + 1) + '"><button type="button" class="mph-x" data-a="mail-photo-x" data-id="' + i + '" aria-label="Remove photo ' + (i + 1) + '">' + IC.close + '</button></span>'; }).join('') +
@@ -256,6 +256,10 @@ var MAIL_ACTIONS = {
   'mail-view': function (t, id) { mailRead(); S.mailView = id === 'edit' && S.mail.status === 'sent' ? 'sent' : id; S.sheet.err = ''; redrawSheet(); },
   'mail-pick-all': function () { var pool = mailShown(mailPool(byId('ed_events', S.mail.event_id) || S.ev)), all = pool.every(function (r) { return S.mailSel[r.email]; }); pool.forEach(function (r) { if (all) delete S.mailSel[r.email]; else S.mailSel[r.email] = 1; }); redrawSheet(); },
   'mail-wide': function () { S.mailWide = !S.mailWide; redrawSheet(); },
+  'mail-verse': function () {
+    var r = $('#ml_vref'), msg = $('#ml_message'); S.sheet.err = ''; refreshSheetErr();
+    busy(bibleFetch(r.value, $('#ml_vtr').value), '').then(function (v) { msg.value = (msg.value.trim() ? msg.value.trim() + '\n\n' : '') + '“' + v.text + '”\n— ' + v.ref + ' (' + v.abbr + ')'; r.value = ''; mailRead(); }).catch(function (e) { sheetErr(e.message); });
+  },
   'mail-pick-none': function () { S.mailSel = {}; redrawSheet(); },
   'mail-pick-tag': function (t, tag) {
     var g = mailShown(mailPool(byId('ed_events', S.mail.event_id) || S.ev)).filter(function (r) { return r.tags.indexOf(tag) >= 0; }), on = g.every(function (r) { return S.mailSel[r.email]; });
