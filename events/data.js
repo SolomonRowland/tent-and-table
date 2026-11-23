@@ -37,8 +37,6 @@ function CloudDB() {
   return {
     mode: 'cloud', sb: sb,
     user: function () { return sb.auth.getSession().then(function (r) { me = r.data.session ? r.data.session.user : null; return me; }); },
-    // Google sends the person back here with the session in the address; the client reads it on load.
-    signInGoogle: function () { return sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } }).then(function (r) { if (r.error) throw r.error; }); },
     signIn: function (e, p) { return sb.auth.signInWithPassword({ email: e, password: p }).then(function (r) { if (r.error) throw r.error; me = r.data.user; return me; }); },
     signUp: function (e, p) { return sb.auth.signUp({ email: e, password: p, options: { emailRedirectTo: location.origin + location.pathname } }).then(function (r) { if (r.error) throw r.error; me = r.data.session ? r.data.user : null; return me; }); },
     sendCode: function (phone) { return sb.auth.signInWithOtp({ phone: phone }).then(function (r) { if (r.error) throw r.error; }); },
@@ -208,7 +206,7 @@ function DemoDB() {
     mode: 'demo',
     reset: function () { D = demoSeed(); persist(); },
     user: function () { return ok(D.me); },
-    signIn: function () { return ok(D.me); }, signInGoogle: function () { return ok(D.me); }, signUp: function () { return ok(D.me); }, sendCode: function () { return ok(); }, verifyCode: function () { return ok(D.me); }, signOut: function () { return ok(); }, resetPassword: function () { return ok(); },
+    signIn: function () { return ok(D.me); }, signUp: function () { return ok(D.me); }, sendCode: function () { return ok(); }, verifyCode: function () { return ok(D.me); }, signOut: function () { return ok(); }, resetPassword: function () { return ok(); },
     myOrg: function () {
       var m = T('ed_members').find(function (x) { return x.user_id === D.me.id; }); if (!m) return ok(null);
       return ok({ org: T('ed_orgs').find(function (o) { return o.id === m.org_id; }), role: m.role, members: T('ed_members').filter(function (x) { return x.org_id === m.org_id; }), invites: T('ed_invites').filter(function (x) { return x.org_id === m.org_id; }) });
