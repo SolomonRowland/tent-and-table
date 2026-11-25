@@ -1000,6 +1000,33 @@ button.act{border:0;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
 .mailverse{margin:8px 0 2px}
 .secnote{margin:-4px 0 10px}
 .pwwrap{position:relative}.pwwrap .inp{width:100%;padding-right:68px}.pwshow{position:absolute;right:4px;top:50%;transform:translateY(-50%);min-height:40px;min-width:56px;padding:0 10px;border:0;background:none;color:var(--red);font:600 14px var(--sans);cursor:pointer;border-radius:6px}.pwshow:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+/* ---- Desktop layout (1100px and wider): the same screens, arranged for a computer ---- */
+@media(min-width:1100px){
+  body.desk.has-nav #app{max-width:1320px}
+  body.desk #app{max-width:1320px}
+  body.desk .top{border-radius:0 0 18px 18px;padding:22px 32px 22px}
+  body.desk .top h1{font-size:28px}
+  body.desk .top .areabar{max-width:760px}
+  body.desk .top:has(+ main > .stats:first-child),body.desk .top:has(+ main > .countdown:first-child){padding-bottom:52px}
+  body.desk main{padding:8px 32px 48px}
+  body.desk main.dgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:28px;align-items:start;grid-auto-flow:row dense}
+  body.desk .blk{grid-column:span 6;min-width:0}
+  body.desk .blk.wide{grid-column:1/-1}
+  body.desk .blk.lead{padding-top:16px}
+  body.desk .top + main.dgrid > .blk.lead:first-child > .stats:first-child,body.desk .top + main.dgrid > .blk.lead:first-child > .countdown:first-child{margin-top:-52px;position:relative;z-index:2}
+  body.desk .top:has(+ main.dgrid > .blk.lead:first-child > .stats:first-child),body.desk .top:has(+ main.dgrid > .blk.lead:first-child > .countdown:first-child){padding-bottom:58px}
+  body.desk .blk.lead:has(> .stats:first-child),body.desk .blk.lead:has(> .countdown:first-child){padding-top:0}
+  body.desk .blk > .sec:first-child{margin-top:26px}
+  body.desk .list.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+  body.desk .stats{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+  body.desk .blk.lead > .card,body.desk .blk.lead > .countdown{max-width:none}
+  /* forms open as a panel on the right instead of rising from the bottom */
+  body.desk .scrim{justify-content:flex-end;align-items:stretch;padding:0}
+  body.desk .sheet{max-width:600px;width:600px;max-height:none;height:100vh;height:100dvh;border-radius:0;padding:0 28px 22px;animation:panelIn .24s cubic-bezier(.2,.8,.2,1);box-shadow:-18px 0 40px -20px rgba(17,20,24,.35)}
+  body.desk .sheet > h3:first-child{margin:0 -28px 6px;padding:20px 28px}
+  body.desk .sheet .acts{bottom:-22px}
+}
+@keyframes panelIn{from{transform:translateX(40px);opacity:.3}}
 </style>
 </head>
 <body>

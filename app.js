@@ -294,6 +294,31 @@ function openPub(kind, slug) {
 }
 
 /* ================================================================ render core */
+/* ---------- desktop layout: same screens and features, arranged for a wide screen.
+   On a computer (1100px and wider) each screen's sections ("Needs Attention", "Tasks"...) become blocks
+   laid out side by side, long lists flow into two columns, and forms open as a panel on the right.
+   Phones never run this, so the phone layout is untouched. Nothing here adds or removes a feature. */
+var DESK = window.matchMedia ? window.matchMedia('(min-width: 1100px)') : null;
+function isDesk() { return !!(DESK && DESK.matches); }
+if (DESK) { var deskChange = function () { if (S.user || S.pubMode) render(); else document.body.classList.toggle('desk', isDesk()); }; if (DESK.addEventListener) DESK.addEventListener('change', deskChange); else if (DESK.addListener) DESK.addListener(deskChange); }
+function deskLayout() {
+  document.body.classList.toggle('desk', isDesk());
+  if (!isDesk() || S.pubMode || !S.acct) return;
+  var m = $('#app main'); if (!m) return;
+  var kids = [].slice.call(m.children); if (kids.length < 2 || !kids.some(function (k) { return k.classList.contains('sec'); })) return;
+  var blocks = [], cur = null;
+  kids.forEach(function (k) {
+    if (!cur || k.classList.contains('sec')) { cur = document.createElement('section'); cur.className = 'blk' + (k.classList.contains('sec') ? '' : ' lead'); blocks.push(cur); }
+    cur.appendChild(k);
+  });
+  blocks.forEach(function (b) {
+    var lists = [].slice.call(b.querySelectorAll(':scope > .list')), long = lists.some(function (l) { return l.children.length > 3; });
+    var wide = b.classList.contains('lead') || long || b.querySelector('form, table, .toolbar, .search, input, select, textarea, .seg-tabs, .subtabs, .stats, .tvtable, .chips, .cal, .sharebar');
+    if (wide) b.classList.add('wide');
+    lists.forEach(function (l) { if (l.children.length > 3 && wide) l.classList.add('cols'); });
+  });
+  m.textContent = ''; blocks.forEach(function (b) { m.appendChild(b); }); m.classList.add('dgrid');
+}
 function render() {
   var h;
   if (S.pubMode) h = S.pubMode === 'u' ? viewUnsub() : S.pubMode === 'c' ? viewCard() : S.pubMode === 'k' ? viewSelfCheckin() : viewPublic();
@@ -311,6 +336,7 @@ function render() {
   }
   document.body.classList.toggle('has-nav', !!(S.user && S.acct && !S.pubMode));
   document.body.classList.toggle('in-ev', !!(S.user && S.acct && S.ev && !S.pubMode));
+  deskLayout();
   renderLayer();
 }
 function renderLayer() {
@@ -1270,7 +1296,7 @@ function viewSettings() {
     (DB.mode === 'demo' ? row({ act: 'reset-demo', id: 'x', title: 'Reset The Demo', sub: 'Put the sample ministry back the way it started' }) : '') +
     row({ act: 'signout', id: 'x', title: 'Sign Out', sub: esc(S.user.email || '') }) +
     row({ act: 'leave-org', id: 'x', title: '<span class="danger">Leave This Ministry</span>', sub: 'You’ll lose access to its events and Directory' }) + '</div>';
-  return h + '<p class="small muted center" style="margin-top:22px">Tent &amp; Table</p></main>';
+  return h + '<p class="small muted center" style="margin-top:22px">Tent &amp; Table</p></main>' + mainNav('settings', 'deskonly');
 }
 var TIMEZONES = [['America/New_York', 'Eastern'], ['America/Chicago', 'Central'], ['America/Denver', 'Mountain'], ['America/Phoenix', 'Arizona'], ['America/Los_Angeles', 'Pacific'], ['America/Anchorage', 'Alaska'], ['Pacific/Honolulu', 'Hawaii']];
 var F_ORG = [
