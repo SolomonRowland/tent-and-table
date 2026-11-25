@@ -39,7 +39,7 @@ function mapUrl(a) { return 'https://www.google.com/maps/search/?api=1&query=' +
 function errMsg(e) {
   var m = String((e && (e.message || e.error_description || e.msg)) || e || '');
   if (/created_by_fkey|user_id_fkey/i.test(m)) return 'This login no longer exists (it may have been deleted in Supabase). Tap Sign Out, then sign in or create the account again.';
-  if (/invalid login credentials/i.test(m)) return 'That email and password don’t match. New here? Tap Create An Account first.';
+  if (/invalid login credentials/i.test(m)) return 'That email and password don’t match. New here? Choose Create Account first.';
   if (/already registered|user_already_exists/i.test(m)) return 'That email already has an account. Sign in instead.';
   if (/password should be|weak password/i.test(m)) return 'Use a password with at least 8 characters.';
   if (/email not confirmed/i.test(m)) return 'Confirm your email first, then sign in.';
@@ -785,10 +785,11 @@ function viewAuth() {
     '<form data-form="auth" class="fgrid">' +
     '<div class="fld"><label for="a_email">Email</label><input class="inp" id="a_email" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email" enterkeyhint="next" required></div>' +
     (reset ? '' : '<div class="fld"><label for="a_pw">Password</label><div class="pwwrap"><input class="inp" id="a_pw" name="pw" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" minlength="8" enterkeyhint="go" required>' + '<button type="button" class="pwshow" data-a="pw-show" aria-label="Show password" aria-pressed="false">Show</button></div>' + (up ? '<span class="hint">At least 8 characters.</span>' : '') + '</div>') +
-    '<div class="fld"><button class="btn block' + (S.busy ? ' saving' : '') + '" type="submit"' + (S.busy ? ' disabled' : '') + '>' + (reset ? 'Send Reset Link' : up ? 'Create Account' : 'Sign In') + '</button></div></form>' +
+    (reset ? '' : '<div class="fld"><div class="authmode" role="tablist" aria-label="Create an account or sign in"><button type="button" role="tab" data-a="auth-mode" data-v="up" aria-selected="' + up + '">Create Account</button><button type="button" role="tab" data-a="auth-mode" data-v="in" aria-selected="' + !up + '">Sign In</button></div></div>') +
+    '<div class="fld"><button class="btn block' + (S.busy ? ' saving' : '') + '" type="submit"' + (S.busy ? ' disabled' : '') + '>' + (reset ? 'Send Reset Link' : up ? 'Create My Account' : 'Sign In') + '</button></div></form>' +
     (up ? '<p class="small muted">Each login belongs to one ministry. If you serve with two ministries, use a different email for each.</p>' : '') +
     (S.authMsg ? '<div class="err">' + esc(S.authMsg) + '</div>' : '') +
-    '<p class="small muted" style="margin-top:16px">' + (up ? 'Already have an account? <a href="#" data-a="auth-mode" data-v="in">Sign In</a>' : 'New here? <a href="#" data-a="auth-mode" data-v="up">Create An Account</a> · <a href="#" data-a="auth-mode" data-v="reset">Forgot Password</a>') + '</p>' + (TEXT_SIGNIN ? '<p class="small muted"><a href="#" data-a="auth-via" data-v="phone">Sign in with a text code instead</a></p>' : '') +
+    '<p class="small muted" style="margin-top:16px">' + (reset ? '<a href="#" data-a="auth-mode" data-v="in">Back To Sign In</a>' : up ? '' : '<a href="#" data-a="auth-mode" data-v="reset">Forgot Password</a>') + '</p>' + (TEXT_SIGNIN ? '<p class="small muted"><a href="#" data-a="auth-via" data-v="phone">Sign in with a text code instead</a></p>' : '') +
     '<div class="card" style="margin-top:24px"><b>Just Looking?</b><p class="small muted" style="margin:4px 0 10px">Open a demo ministry with sample events. Nothing you change there is saved to an account.</p><button class="btn ghost sm" data-a="try-demo">Try The Demo</button></div></div>';
 }
 function e164(p) { var s = String(p || '').trim(), d = s.replace(/[^0-9]/g, ''); if (s.charAt(0) === '+' && d.length >= 8) return '+' + d; if (d.length === 10) return '+1' + d; if (d.length === 11 && d.charAt(0) === '1') return '+' + d; return ''; }
@@ -2633,7 +2634,7 @@ var A = {
   'auth-via': function (t) { S.authVia = t.getAttribute('data-v'); S.authMsg = ''; S.otpPhone = ''; render(); },
   'otp-change': function () { S.otpPhone = ''; S.authMsg = ''; render(); },
   'otp-resend': function () { var ph = S.otpPhone; S.authMsg = ''; DB.sendCode(ph).then(function () { toast('Code sent again'); }, function (e) { S.authMsg = otpErr(e); render(); }); },
-  'auth-mode': function (t) { S.authMode = t.getAttribute('data-v'); S.authMsg = ''; render(); },
+  'auth-mode': function (t) { var e = $('#a_email'), w = $('#a_pw'), keep = [e && e.value, w && w.value, w && w.type]; S.authMode = t.getAttribute('data-v'); S.authMsg = ''; render(); e = $('#a_email'); w = $('#a_pw'); if (e && keep[0]) e.value = keep[0]; if (w && keep[1]) { w.value = keep[1]; if (keep[2] === 'text') { var sb = w.parentNode.querySelector('[data-a="pw-show"]'); if (sb) A['pw-show'](sb); } } },
   'try-demo': function () { lset('ed.mode', 'demo'); location.reload(); },
   'leave-demo': function () { lset('ed.mode', null); location.href = location.pathname; },
   'reset-demo': function () { ask('Put the demo back to its starting data?', 'Reset Demo', function () { DB.reset(); S.ev = null; S.tab = 'home'; return loadAll().then(function () { render(); toast('Demo reset'); }); }); },
