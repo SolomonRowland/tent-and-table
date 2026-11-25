@@ -764,6 +764,11 @@ var F_ASSIGN = {
 var TEXT_SIGNIN = false;
 // Turn on once Google is set up in Supabase (Authentication, Sign In / Providers, Google).
 var GOOGLE_SIGNIN = false;
+// Ask the phone or browser to remember this login, where it offers that (Chrome and Android). iPhones offer to
+// save on their own when the sign-in form is sent, which is why the form has real email and password fields.
+function savePassword(email, pw) {
+  try { if (window.PasswordCredential && navigator.credentials && navigator.credentials.store) navigator.credentials.store(new window.PasswordCredential({ id: email, password: pw, name: email })).catch(function () {}); } catch (e) {}
+}
 function viewAuth() {
   var up = S.authMode === 'up', reset = S.authMode === 'reset';
   var intro = '<div class="auth"><div class="logo">' + IC.tent + '</div><h1>Tent &amp; Table</h1>' +
@@ -782,7 +787,7 @@ function viewAuth() {
   }
   return intro +
     (GOOGLE_SIGNIN && !reset ? '<button class="btn plain block gbtn" data-a="auth-google"' + (S.busy ? ' disabled' : '') + '><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.2l7.9 6.2C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.2C1 16.6 0 20.2 0 24s1 7.4 2.7 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.2C6.6 42.6 14.6 48 24 48z"/></svg>Continue With Google</button><div class="ordiv"><span>or use email</span></div>' : '') +
-    '<form data-form="auth" class="fgrid">' +
+    '<form data-form="auth" class="fgrid" method="post" action="#">' +
     '<div class="fld"><label for="a_email">Email</label><input class="inp" id="a_email" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email" enterkeyhint="next" required></div>' +
     (reset ? '' : '<div class="fld"><label for="a_pw">Password</label><div class="pwwrap"><input class="inp" id="a_pw" name="pw" type="password" autocomplete="' + (up ? 'new-password' : 'current-password') + '" minlength="8" enterkeyhint="go" required>' + '<button type="button" class="pwshow" data-a="pw-show" aria-label="Show password" aria-pressed="false">Show</button></div>' + (up ? '<span class="hint">At least 8 characters.</span>' : '') + '</div>') +
     (reset ? '' : '<div class="fld"><div class="authmode" role="tablist" aria-label="Create an account or sign in"><button type="button" role="tab" data-a="auth-mode" data-v="up" aria-selected="' + up + '">Create Account</button><button type="button" role="tab" data-a="auth-mode" data-v="in" aria-selected="' + !up + '">Sign In</button></div></div>') +
@@ -2824,7 +2829,7 @@ document.addEventListener('submit', function (ev) {
   if (k === 'auth') {
     S.authMsg = ''; S.busy = true; render();
     var p = S.authMode === 'reset' ? DB.resetPassword(v.email).then(function () { S.authMsg = 'Check your email for a reset link.'; S.authMode = 'in'; })
-      : (S.authMode === 'up' ? DB.signUp(v.email, v.pw) : DB.signIn(v.email, v.pw)).then(function (u) { if (!u) { S.authMsg = 'Check your email to confirm your account, then sign in.'; S.authMode = 'in'; return; } S.user = u; S.loading = true; return loadAcct(); });
+      : (S.authMode === 'up' ? DB.signUp(v.email, v.pw) : DB.signIn(v.email, v.pw)).then(function (u) { if (!u) { S.authMsg = 'Check your email to confirm your account, then sign in.'; S.authMode = 'in'; return; } savePassword(v.email, v.pw); S.user = u; S.loading = true; return loadAcct(); });
     p.catch(function (e) { S.authMsg = errMsg(e); }).then(function () { S.busy = false; render(); });
   } else if (k === 'auth-phone') {
     S.authMsg = '';
