@@ -413,7 +413,6 @@ function infoList(pairs) {
   var p = pairs.filter(function (x) { return x[1] !== '' && x[1] != null; });
   return p.length ? '<dl class="info">' + p.map(function (x) { return '<dt>' + esc(x[0]) + '</dt><dd>' + (x[2] ? x[1] : esc(x[1])) + '</dd>'; }).join('') + '</dl>' : '';
 }
-function contactLine(r) { return esc([r.phone, r.email].filter(Boolean).join(' · ')); }
 
 /* ================================================================ forms */
 /* field: {k, label, type, opts, ph, half, hint, def, auto}
@@ -2756,8 +2755,6 @@ var A = {
   'open-pub': function (t, id) { closeSheet(); openPub(id, S.ev.slug); },
   'show-qr': function (t, id) { showQr(id); },
   doc: function (t, id) { openDoc(id); },
-  'doc-copy': function (t, id) { copyText(docBuild(id).text); },
-  'doc-print': function (t, id) { printHtml(docBuild(id).html); },
   'slot-open': function (t, id) { S.openSlots = S.openSlots || {}; S.openSlots[id] = !S.openSlots[id]; render(); },
   'ci-again': function () { S.ciDone = null; S.cardErr = ''; render(); },
   'pub-go': function (t, id) { openPub(id, S.pubSlug); },

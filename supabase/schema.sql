@@ -1,4 +1,4 @@
--- Tent & Table database (version 19).
+-- Tent & Table database (version 20).
 -- Paste this whole file into Supabase: SQL Editor -> New query -> Run.
 -- It is safe to run more than once, and running it again never deletes data.
 -- Every table and function starts with "ed_".
@@ -424,7 +424,8 @@ create table if not exists public.ed_cards (
 );
 create index if not exists ed_cards_event_idx on public.ed_cards (event_id);
 
--- Upgrades from versions 12 to 19 (they come after every table above exists).
+-- Upgrades from versions 12 to 20 (they come after every table above exists).
+-- version 20: table access stated outright and helper functions closed off (both at the end); no new tables or columns
 -- version 19: a private calendar link for each login (table ed_cal, at the end)
 -- version 18: details that depend on the contact type (speaker bio and travel, volunteer shirt size, guest church home...)
 alter table public.ed_people add column if not exists info jsonb not null default '{}'::jsonb;

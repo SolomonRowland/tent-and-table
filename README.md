@@ -12,7 +12,7 @@ On a phone, open the live app and add it to your home screen (iPhone: Safari > S
 ## How It's Organized
 
 - **One login, one ministry.** A ministry account holds up to 10 logins. Each login (email) belongs to exactly one ministry; someone who serves with two ministries signs up for each with a different email. The database enforces this (`ed_members.user_id` is unique).
-- **Directory** (the ministry's pool), in tabs: People (team members with titles, worship, speakers, volunteers; status Current or Previous), Vendors, Contacts, Equipment inventory, and Budget by year. Every person, vendor and contact can be called, texted, emailed, mapped or visited from their card.
+- **Directory** (the ministry's pool), in tabs: Contacts (every person and business in one list, each with a type), Equipment inventory, and Budget by year. Every person, vendor and contact can be called, texted, emailed, mapped or visited from their card.
 - **New events** start with a short walkthrough: name, dates and times, place and address, a yes or no for each part the event will have (guests, volunteers, speakers, worship, team, meals, vendors, equipment, money, connection cards, schedule, agenda; tasks are on for every event), goals (volunteers needed, seats, budget) and the text for the share pages. Saving builds the event, a general volunteer spot sized to the goal, and an RSVP for each day, so the QR codes work right away. The volunteer goal is tracked on the event and shown on the volunteer page.
 - **Contacts.** The Directory's Contacts tab holds every person and business in one list. Each contact has a type, the same five used inside every event: Team (leaders, board, staff, worship, speakers, prayer team), Volunteer, Guest, Vendor and Other (landowners, permit offices, partners). Filter by type or by a team group like Board, and every row reads the same way: the name, then what they do and how to reach them, with the type on the right. Volunteers and guests who sign up can be saved to Contacts in one tap.
 - **Events.** Each event opens in its own workspace organized into areas: Overview (countdown, the heart of the event, at-a-glance numbers, what needs attention, what is coming up), Plan (tasks, schedule, agenda, set lists, equipment), Contacts (Team, Volunteers with meal sign-ups, Guests with RSVPs, check-in and follow-up, Vendors, and Other), Prayer and Money. Each list carries its own share link and QR code: volunteers and meals, guest RSVP, and the connection card. An event pulls what it needs from the Directory: the people serving and their role, vendors with cost, payment status, who pays and when it's due, contacts, and how many of each equipment item. Equipment that is double-booked across overlapping events is flagged.
@@ -33,7 +33,7 @@ On a phone, open the live app and add it to your home screen (iPhone: Safari > S
 - **Works without signal.** The app keeps a copy of your ministry's data on the device after every load. With no connection it opens from that copy, says when it was saved, and shows a banner; changes wait until you're back online.
 - **Import contacts.** Directory > Import takes a spreadsheet saved as CSV (a header row with Name or First and Last Name, Phone, Email; Title, Organization, Address, Notes and Type are optional) or a .vcf export from a phone. It previews the list, skips people already in Contacts, and adds the rest as the type you choose or the file's Type column.
 - **Weather.** For an event within two weeks that has an address, the Overview shows the forecast for each day (high, low and chance of rain) from Open-Meteo. Only the city and state are sent.
-- **Desktop.** On a wide screen the bottom buttons become a sidebar and pages use more of the width.
+- **Phone and desktop are one app.** There is a single set of screens. On a phone the four main places are bottom buttons and forms slide up; on a computer (1100px and wider) they become a sidebar, sections sit side by side, long lists flow into two columns and forms open as a panel on the right (`deskLayout()` in `app.js` and the "Desktop layout" block at the end of the styles). A change to any screen shows up on both.
 - **Event day.** While an event is happening, its Overview opens with today's schedule and one-tap Check-In, Run Of Show and Phone List.
 - **Notes for next year.** After an event ends, write down what worked and what to change. The notes stay with the event when you choose Start Next Year.
 - **Add to calendar.** Public sign-up and RSVP pages have an Add To Calendar button.
@@ -47,7 +47,9 @@ On a phone, open the live app and add it to your home screen (iPhone: Safari > S
 
 - `index.html` holds the styles and loads the scripts.
 - `data.js` is the data layer: `CloudDB` (Supabase) and `DemoDB` (browser storage, same API) plus the demo ministry.
-- `app.js` is the screens.
+- `app.js` is the screens, and `mail.js` is the email builder.
+- `sw.js` keeps the app working offline; bump its cache name with every release. `events/` only forwards old links.
+- `supabase/functions/ed-mail/` sends event emails (`supabase/EMAIL.md`) and `supabase/functions/ed-cal/` serves the calendar link (`supabase/CALENDAR.md`).
 - `supabase/functions/ed-notify/` sends the automatic texts and emails; `supabase/notify-schedule.sql` runs it every 15 minutes. See `supabase/NOTIFY.md`.
 - `supabase/schema.sql` sets up the database. Paste it into Supabase's SQL Editor and run it; it is safe to run again. Every table starts with `ed_`. Row-level security keeps each ministry's rows to its own members, and the public pages go through a few `security definer` functions.
 - `supabase.js` is the Supabase client, and `qrcode.js` (MIT, Kazuhiko Arase) draws QR codes.
