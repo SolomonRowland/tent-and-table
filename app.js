@@ -318,6 +318,13 @@ function deskLayout() {
     if (wide) b.classList.add('wide');
     lists.forEach(function (l) { if (l.children.length > 3 && wide) l.classList.add('cols'); });
   });
+  // Half-width blocks go in pairs; one left without a partner takes the full width, so nothing sits beside empty space.
+  var run = [];
+  blocks.concat([null]).forEach(function (b) {
+    if (b && !b.classList.contains('wide')) { run.push(b); return; }
+    if (run.length % 2) run[run.length - 1].classList.add('wide');
+    run = [];
+  });
   m.textContent = ''; blocks.forEach(function (b) { m.appendChild(b); }); m.classList.add('dgrid');
 }
 function render() {

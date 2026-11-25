@@ -1009,7 +1009,9 @@ button.act{border:0;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
   body.desk .top .areabar{max-width:760px}
   body.desk .top:has(+ main > .stats:first-child),body.desk .top:has(+ main > .countdown:first-child){padding-bottom:52px}
   body.desk main{padding:8px 32px 48px}
-  body.desk main.dgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:28px;align-items:start;grid-auto-flow:row dense}
+  body.desk main.dgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:28px;align-items:start}
+  body.desk .blk > .card + *,body.desk .blk > * + .card,body.desk .blk > .stats + *,body.desk .blk > * + .stats,body.desk .blk > .list + .list{margin-top:12px}
+  body.desk .blk .qr-tools{justify-content:flex-start}
   body.desk .blk{grid-column:span 6;min-width:0}
   body.desk .blk.wide{grid-column:1/-1}
   body.desk .blk.lead{padding-top:16px}
