@@ -38,7 +38,7 @@ function webUrl(u) { u = String(u || '').trim(); if (!u) return ''; return /^htt
 function mapUrl(a) { return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(a); }
 function errMsg(e) {
   var m = String((e && (e.message || e.error_description || e.msg)) || e || '');
-  if (/invalid login credentials/i.test(m)) return 'That email and password don’t match.';
+  if (/invalid login credentials/i.test(m)) return 'That email and password don’t match. New here? Tap Create An Account first.';
   if (/already registered|user_already_exists/i.test(m)) return 'That email already has an account. Sign in instead.';
   if (/password should be|weak password/i.test(m)) return 'Use a password with at least 8 characters.';
   if (/email not confirmed/i.test(m)) return 'Confirm your email first, then sign in.';
