@@ -1125,7 +1125,7 @@ function stuffFor(refs, names, created) {
     if (mine) out.tasks.push({ t: t, e: e });
   });
   if (created) return out;
-  T('ed_agenda').forEach(function (x) { var e = evs[x.event_id]; if (e && (e.ends_on || e.starts_on || '9') >= TODAY && (refs.indexOf(x.leader_ref) >= 0 || hasName(x.leader, names))) out.lead.push({ kind: 'agenda', x: x, e: e, d: e.starts_on || '', k: x.start_time || '' }); });
+  T('ed_agenda').forEach(function (x) { var e = evs[x.event_id]; if (e && (e.ends_on || e.starts_on || '9') >= TODAY && (refs.indexOf(x.leader_ref) >= 0 || hasName(x.leader, names))) out.lead.push({ kind: 'agenda', x: x, e: e, d: agDay(x, evDays(e)) || '', k: x.start_time || '' }); });
   T('ed_schedule').forEach(function (x) { var e = evs[x.event_id]; if (e && (x.on_date || '9') >= TODAY && (refs.indexOf(x.owner_ref) >= 0 || hasName(x.owner, names))) out.lead.push({ kind: 'sched', x: x, e: e, d: x.on_date || '', k: x.start_time || '' }); });
   out.lead.sort(function (a, b) { return (a.d + a.k).localeCompare(b.d + b.k); });
   T('ed_event_people').forEach(function (x) { var e = evs[x.event_id]; if (e && (e.ends_on || e.starts_on || '9') >= TODAY && refs.indexOf('ed_people:' + x.person_id) >= 0) out.serve.push({ x: x, e: e }); });
@@ -1827,17 +1827,41 @@ function signupBlock(kind, title, addLabel) {
 }
 
 /* ---------- agenda */
+// A multi-day event has an agenda for each day. Segments saved before days existed (no date) belong to the first day,
+// and any that fall outside the event's dates after the dates change go to the nearest day.
+function evDays(e) { var out = []; if (!e || !e.starts_on) return out; for (var d = e.starts_on, n = 0; d <= (e.ends_on || e.starts_on) && n < 62; d = addDays(d, 1), n++) out.push(d); return out; }
+function agDay(a, days) { if (days.length < 2) return days[0] || ''; var d = a.on_date || days[0]; return d < days[0] ? days[0] : d > days[days.length - 1] ? days[days.length - 1] : d; }
+function agendaDay(e) {
+  var days = evDays(e); if (days.length < 2) return days[0] || '';
+  var d = S.sub.agDay && S.sub.agDay.ev === e.id && days.indexOf(S.sub.agDay.d) >= 0 ? S.sub.agDay.d : (days.indexOf(TODAY) >= 0 ? TODAY : days[0]);
+  S.sub.agDay = { ev: e.id, d: d }; return d;
+}
+function agendaRows(e, day) { var days = evDays(e); return evRows('ed_agenda', e).filter(function (a) { return days.length < 2 || agDay(a, days) === day; }).sort(function (a, b) { return a.sort - b.sort || String(a.start_time || '').localeCompare(String(b.start_time || '')); }); }
+function dayName(d, days) { return 'Day ' + (days.indexOf(d) + 1); }
 function wsAgenda(e) {
-  var list = evRows('ed_agenda').sort(function (a, b) { return a.sort - b.sort; }), mins = list.reduce(function (s, a) { return s + num(a.minutes); }, 0);
-  return secHead('Agenda', addBtn('Add Segment', 'add-agenda'), mins ? 'About ' + mins + ' Minutes' : '') +
+  var days = evDays(e), multi = days.length > 1, day = agendaDay(e), list = agendaRows(e, day), mins = list.reduce(function (s, a) { return s + num(a.minutes); }, 0);
+  var strip = multi ? '<nav class="daytabs" role="tablist" aria-label="Day">' + days.map(function (d) {
+    var n = agendaRows(e, d).length;
+    return '<button role="tab" aria-selected="' + (d === day) + '" data-a="ag-day" data-v="' + d + '"><b>' + dayName(d, days) + (n ? ' <i>' + n + '</i>' : '') + '</b><span>' + esc(fmtDay(d)) + '</span></button>';
+  }).join('') + '</nav>' : '';
+  var prev = multi && !list.length ? days.slice(0, days.indexOf(day)).reverse().find(function (d) { return agendaRows(e, d).length; }) : null;
+  var empty = multi ? 'Nothing planned for ' + esc(dayName(day, days)) + ' yet. Add each part of the day and who leads it.' : 'No segments yet. Opening prayer, worship, housekeeping, the message: add each part and who leads it.';
+  return strip + secHead(multi ? dayName(day, days) + ' Agenda' : 'Agenda', addBtn('Add Segment', 'add-agenda'), [multi ? fmtDay(day) : '', mins ? 'About ' + mins + ' Minutes' : ''].filter(Boolean).join(' · ')) +
     listBox(list.map(function (a, i) {
       var who = refContact(a.leader_ref), name = who ? who.name : a.leader;
       return '<div class="row">' + ck(a.done, 'toggle-agenda', a.id, 'Done') + '<button class="main" data-a="edit-agenda" data-id="' + a.id + '"><div class="t' + (a.done ? ' done' : '') + '">' + (i + 1) + '. ' + esc(a.title) + '</div><div class="s">' + esc([a.start_time ? fmtTime(a.start_time) : '', name, a.minutes ? a.minutes + ' Min' : ''].filter(Boolean).join(' · ')) + (a.notes ? '<br>' + esc(a.notes) : '') + '</div></button>' + refPill(a.leader_ref) + '</div>';
-    }), 'No segments yet. Opening prayer, worship, housekeeping, the message: add each part and who leads it.') +
+    }), empty) +
+    (prev ? '<div class="card tip"><b>Same Plan As ' + esc(dayName(prev, days)) + '?</b><p class="small muted">Copy ' + esc(dayName(prev, days)) + '’s ' + plural(agendaRows(e, prev).length, 'segment') + ' to ' + esc(dayName(day, days)) + ', then change what’s different.</p><button class="btn sm ghost" data-a="ag-copy" data-v="' + prev + '">Copy ' + esc(dayName(prev, days)) + '’s Agenda</button></div>' : '') +
     secHead('Meeting Notes', '<button class="link" data-a="edit-notes">' + (e.notes ? 'Edit' : 'Add Notes') + '</button>') +
     '<div class="card notes">' + (e.notes ? esc(e.notes) : '<span class="muted">Decisions, prayer needs and next steps.</span>') + '</div>';
 }
 
+// the segment form gets a Day picker when the event runs more than one day, so a segment can move to another day
+function agendaFields(rec) {
+  var days = evDays(S.ev); if (days.length < 2) return F.agenda;
+  var f = F.agenda.slice(); f.splice(1, 0, { k: 'on_date', label: 'Day', type: 'select', opts: days.map(function (d) { return [d, dayName(d, days) + ' · ' + fmtDay(d)]; }) });
+  return f;
+}
 /* ---------- vendors & contacts */
 function wsVendors(e) {
   var vs = evRows('ed_event_vendors').map(function (a) { return { a: a, v: byId('ed_vendors', a.vendor_id) || { name: '(Removed)' } }; }).sort(function (x, y) { return x.v.name.localeCompare(y.v.name); });
@@ -2108,9 +2132,13 @@ function docBuild(k) {
     if (e.debrief) { h2('Notes For Next Year'); H.push('<p>' + esc(e.debrief) + '</p>'); T2.push(e.debrief); }
   }
   if (k === 'agenda') {
-    var ag = evRows('ed_agenda').sort(function (x, y) { return x.sort - y.sort; });
-    if (ag.length) H.push(table(['#', 'Time', 'Segment', 'Led By', 'Min'], ag.map(function (x, i) { var w = refContact(x.leader_ref), nm = w ? w.name : x.leader || ''; T2.push((i + 1) + '. ' + [x.start_time ? fmtTime(x.start_time) : '', x.title, nm, x.minutes ? x.minutes + ' min' : ''].filter(Boolean).join(' · ')); return [String(i + 1), esc(x.start_time ? fmtTime(x.start_time) : ''), esc(x.title) + (x.notes ? '<br><small>' + esc(x.notes) + '</small>' : ''), esc(nm), x.minutes ? String(x.minutes) : '']; })));
-    else none('No segments yet.');
+    var agDays = evDays(e), agList = agDays.length > 1 ? agDays : [agDays[0] || ''], anyAg = false;
+    agList.forEach(function (d) {
+      var ag = agendaRows(e, d); if (!ag.length) return; anyAg = true;
+      if (agDays.length > 1) h2(dayName(d, agDays) + ' · ' + fmtLong(d));
+      H.push(table(['#', 'Time', 'Segment', 'Led By', 'Min'], ag.map(function (x, i) { var w = refContact(x.leader_ref), nm = w ? w.name : x.leader || ''; T2.push((i + 1) + '. ' + [x.start_time ? fmtTime(x.start_time) : '', x.title, nm, x.minutes ? x.minutes + ' min' : ''].filter(Boolean).join(' · ')); return [String(i + 1), esc(x.start_time ? fmtTime(x.start_time) : ''), esc(x.title) + (x.notes ? '<br><small>' + esc(x.notes) + '</small>' : ''), esc(nm), x.minutes ? String(x.minutes) : '']; })));
+    });
+    if (!anyAg) none('No segments yet.');
   }
   if (k === 'prayer') {
     if (e.theme || e.purpose) { H.push('<div class="ptheme">' + (e.theme ? '<b>' + esc(e.theme) + '</b>' : '') + (e.purpose ? '<p>' + esc(e.purpose) + '</p>' : '') + '</div>'); T2.push('', e.theme || '', e.purpose || ''); }
@@ -2147,7 +2175,7 @@ function showQr(k) {
 /* ================================================================ pickers */
 function pick(t, team) {
   var cfg = {
-    ed_people: { title: 'Add ' + (TEAMS.find(function (x) { return x[0] === team; }) || [, 'People'])[1], list: T('ed_people').filter(function (p) { return p.status === 'current'; }), has: function (r) { return evRows('ed_event_people').some(function (a) { return a.person_id === r.id && a.team === team; }); }, sub: function (r) { return [r.title, (r.groups || []).join(', ')].filter(Boolean).join(' · '); }, newLabel: 'New Contact' },
+    ed_people: { title: 'Add ' + (TEAMS.find(function (x) { return x[0] === team; }) || [, 'People'])[1], list: T('ed_people').filter(function (p) { return p.status === 'current' && pickFits(p, team); }), has: function (r) { return evRows('ed_event_people').some(function (a) { return a.person_id === r.id && a.team === team; }); }, sub: function (r) { return [r.title, (r.groups || []).join(', ')].filter(Boolean).join(' · '); }, newLabel: 'New Contact' },
     ed_vendors: { title: 'Add Vendor', list: T('ed_vendors'), has: function (r) { return evRows('ed_event_vendors').some(function (a) { return a.vendor_id === r.id; }); }, sub: function (r) { return [r.category, r.contact_name].filter(Boolean).join(' · '); }, newLabel: 'New Vendor' },
     ed_contacts: { title: 'Add Contact', list: T('ed_contacts'), has: function (r) { return evRows('ed_event_contacts').some(function (a) { return a.contact_id === r.id; }); }, sub: function (r) { return [r.role, r.organization].filter(Boolean).join(' · '); }, newLabel: 'New Contact' },
     ed_equipment: { title: 'Add Equipment', list: T('ed_equipment').filter(function (g) { return g.condition !== 'Retired'; }), has: function (r) { return evRows('ed_event_equipment').some(function (a) { return a.equipment_id === r.id; }); }, sub: function (r) { return [r.category, 'Own ' + num(r.quantity), r.condition !== 'Good' ? r.condition : ''].filter(Boolean).join(' · '); }, newLabel: 'New Item' }
@@ -2158,13 +2186,13 @@ function pick(t, team) {
     return (cfg.has(a) ? 1 : 0) - (cfg.has(b) ? 1 : 0) || ga - gb || a.name.localeCompare(b.name);
   });
   openSheet(function () {
-    return '<h3>' + esc(cfg.title) + '</h3><p class="lead">' + (t === 'ed_equipment' ? 'From your equipment in the Directory.' : 'From your contacts. ' + (t === 'ed_people' ? esc(groupHint) + ' contacts are listed first.' : '')) + '</p>' +
+    return '<h3>' + esc(cfg.title) + '</h3><p class="lead">' + (t === 'ed_equipment' ? 'From your equipment in the Directory.' : 'From your contacts. ' + (t === 'ed_people' ? (PICK_ONLY[team] ? 'Showing ' + PICK_ONLY[team][1] + ' only.' : esc(groupHint) + ' contacts are listed first.') : '')) + '</p>' +
       '<label class="search block">' + IC.search + '<input type="search" placeholder="Search" data-input="pick-q" aria-label="Search" autofocus></label>' +
       (t === 'ed_people' ? '<div class="fgrid pick-only"><div class="fld"><label for="pk_role">Role At This Event</label><input class="inp" id="pk_role" list="pk_roles" placeholder="Optional"><datalist id="pk_roles">' + TITLES.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist></div></div>' : '') +
       '<div class="picklist">' + list.map(function (r) {
         var has = cfg.has(r);
         return '<label class="pickrow' + (has ? ' has' : '') + '" data-name="' + esc((r.name + ' ' + cfg.sub(r)).toLowerCase()) + '"><input type="checkbox" value="' + r.id + '"' + (has ? ' disabled checked' : '') + '>' + (t !== 'ed_equipment' ? avatar(r.name) : '') + '<span class="main"><span class="t">' + esc(r.name) + '</span><span class="s">' + esc(has ? 'Already Added' : cfg.sub(r)) + '</span></span></label>';
-      }).join('') + (list.length ? '' : '<p class="muted small">Nothing here yet. Add one below.</p>') + '</div>' +
+      }).join('') + (list.length ? '' : '<p class="muted small">' + (t === 'ed_people' && PICK_ONLY[team] ? 'No ' + PICK_ONLY[team][1] + ' in your contacts yet. Add one below, or give a contact that type in the Directory.' : 'Nothing here yet. Add one below.') + '</p>') + '</div>' +
       '<div class="acts pickfoot"><button class="btn ghost pf-new" data-a="pick-new" data-t="' + t + '" data-id="' + esc(team || '') + '">' + IC.plus + ' ' + esc(cfg.newLabel) + '</button><button class="btn plain pf-clear" data-a="pick-clear">Clear</button><span class="grow"></span><button class="btn plain" data-a="close">Cancel</button><button class="btn pf-add" data-save data-a="sheet-save">Add</button></div>';
   }, function () {
     var root = $('#layer .sheet'), ids = $$('.picklist input:checked:not(:disabled)', root).map(function (x) { return x.value; });
@@ -2174,6 +2202,12 @@ function pick(t, team) {
       rows.forEach(function (r) { put(assignTable(t), r); }); closeSheet(); render();
     }).catch(function () {});
   });
+}
+// Speakers only lists speakers, Worship only the worship team, Ministry Team every team member.
+var PICK_ONLY = { speaker: ['speaker', 'speakers'], worship: ['worship', 'worship team members'], team: ['team', 'team members'] };
+function pickFits(p, team) {
+  var k = (PICK_ONLY[team] || [])[0]; if (!k) return true;
+  return k === 'worship' ? (p.groups || []).indexOf('Worship') >= 0 : personTypes(p).indexOf(k) >= 0;
 }
 function assignTable(t) { return { ed_people: 'ed_event_people', ed_vendors: 'ed_event_vendors', ed_contacts: 'ed_event_contacts', ed_equipment: 'ed_event_equipment' }[t]; }
 function assignRow(t, id, team, role) {
@@ -2505,8 +2539,8 @@ function backupFiles() {
       T('ed_prayer').map(function (p) { return [et(p), { intercede: 'Prayer Need', declare: 'Declaration', verse: 'Scripture' }[p.kind] || p.kind, p.title, p.body, p.person_id ? pname('ed_people', p.person_id) : '', p.follow_up_on || '', p.answer, p.private ? 'Yes' : '']; })),
     sheet('schedule', ['Event', 'Date', 'Starts', 'Ends', 'What', 'Where', 'In Charge', 'Notes'],
       T('ed_schedule').map(function (s) { return [et(s), s.on_date, s.start_time, s.end_time, s.title, s.location, s.owner, s.notes]; })),
-    sheet('agenda', ['Event', 'Order', 'Time', 'Segment', 'Led By', 'Minutes', 'Notes'],
-      T('ed_agenda').map(function (x) { return [et(x), (x.sort || 0) + 1, x.start_time || '', x.title, x.leader, x.minutes, x.notes]; })),
+    sheet('agenda', ['Event', 'Day', 'Order', 'Time', 'Segment', 'Led By', 'Minutes', 'Notes'],
+      T('ed_agenda').map(function (x) { var e = byId('ed_events', x.event_id); return [et(x), agDay(x, evDays(e)) || '', (x.sort || 0) + 1, x.start_time || '', x.title, x.leader, x.minutes, x.notes]; })),
     sheet('equipment', ['Item', 'Quantity', 'Category', 'Stored At', 'Condition', 'Notes'],
       T('ed_equipment').map(function (x) { return [x.name, x.quantity, x.category, x.location, x.condition, x.notes]; })),
     sheet('budget', ['Year', 'Line', 'Planned', 'Event', 'Notes'],
@@ -2712,8 +2746,13 @@ var A = {
   reminders: function () { remindersSheet(); },
   'rem-sent': function (t, id) { lset('ed.rem.' + id, '1'); setTimeout(function () { if (S.sheet) redrawSheet(); render(); }, 300); },
   'rem-all': function (t, id) { id.split('|').forEach(function (k) { lset('ed.rem.' + k, '1'); }); setTimeout(function () { if (S.sheet) redrawSheet(); render(); }, 300); },
-  'add-agenda': function () { editRow('ed_agenda', null, F.agenda, { title: 'Add Segment', base: { event_id: S.ev.id, done: false, leader_ref: '', sort: evRows('ed_agenda').length } }); },
-  'edit-agenda': function (t, id) { editRow('ed_agenda', byId('ed_agenda', id), F.agenda, { title: 'Edit Segment' }); },
+  'add-agenda': function () { var d = agendaDay(S.ev), rows = agendaRows(S.ev, d); editRow('ed_agenda', null, agendaFields, { title: 'Add Segment', base: { event_id: S.ev.id, on_date: d || null, done: false, leader_ref: '', sort: rows.length ? Math.max.apply(null, rows.map(function (r) { return num(r.sort); })) + 1 : 0 } }); },
+  'ag-day': function (t) { S.sub.agDay = { ev: S.ev.id, d: t.getAttribute('data-v') }; render(); },
+  'ag-copy': function (t) {
+    var v = t.getAttribute('data-v'), to = agendaDay(S.ev), from = agendaRows(S.ev, v);
+    busy(Promise.all(from.map(function (a) { return DB.save('ed_agenda', { id: uuid(), event_id: a.event_id, on_date: to, title: a.title, leader: a.leader, leader_ref: a.leader_ref || '', start_time: a.start_time || null, minutes: a.minutes, done: false, notes: '', sort: a.sort }); })), 'Agenda Copied').then(function (rows) { rows.forEach(function (r) { put('ed_agenda', r); }); render(); }).catch(function () {});
+  },
+  'edit-agenda': function (t, id) { editRow('ed_agenda', byId('ed_agenda', id), agendaFields, { title: 'Edit Segment' }); },
   'toggle-agenda': function (t, id) { toggle('ed_agenda', id, 'done'); },
   tour: function () { openSheet(function () { return '<h3>Quick Tour</h3><div class="tourvid"><video src="tour.mp4" controls playsinline preload="metadata" poster="tour-poster.jpg"></video></div><p class="small muted" style="margin:10px 0 0">Under two minutes, with narration. Turn your sound on to listen.</p><div class="acts"><span class="grow"></span><button class="btn plain" data-a="close">Done</button></div>'; }); },
   'edit-debrief': function () { var f = [{ k: 'debrief', label: 'What Worked, What Didn’t, What To Change', type: 'textarea', auto: true, ph: 'Start setup an hour earlier. Order more water. The greeter team was great.' }]; editRow('ed_events', S.ev, f, { title: 'Notes For Next Year', del: false, after: function (r) { S.ev = r; } }); },

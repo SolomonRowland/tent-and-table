@@ -176,7 +176,7 @@ function DemoDB() {
       mine('ed_schedule').forEach(function (r) { r.on_date = addDays(r.on_date, delta); });
       mine('ed_items').forEach(function (r) { r.on_date = addDays(r.on_date, delta); });
       mine('ed_tasks').forEach(function (r) { r.done = false; r.due_on = addDays(r.due_on, delta); });
-      mine('ed_agenda').forEach(function (r) { r.done = false; });
+      mine('ed_agenda').forEach(function (r) { r.done = false; if (r.on_date) r.on_date = addDays(r.on_date, delta); });
       mine('ed_event_equipment').forEach(function (r) { r.loaded = false; r.returned = false; });
       mine('ed_event_vendors').forEach(function (r) { r.paid = 0; r.pay_status = 'Not Paid'; if (r.status !== 'Cancelled') r.status = 'Quoted'; r.due_on = addDays(r.due_on, delta); });
       mine('ed_event_people').forEach(function (r) { r.pay_status = 'Not Paid'; r.due_on = addDays(r.due_on, delta); });
@@ -196,7 +196,7 @@ function DemoDB() {
       copy('ed_schedule', function (r) { return { on_date: addDays(r.on_date, delta) }; });
       copy('ed_items', function (r) { return { on_date: addDays(r.on_date, delta) }; });
       copy('ed_tasks', function (r) { return { done: false, due_on: addDays(r.due_on, delta) }; });
-      copy('ed_agenda', function () { return { done: false, notes: '' }; });
+      copy('ed_agenda', function (r) { return { done: false, notes: '', on_date: r.on_date ? addDays(r.on_date, delta) : null }; });
       copy('ed_event_people', function () { return { pay_status: 'Not Paid', due_on: null }; }, function (r) { return r.team === 'volunteer'; });
       copy('ed_event_vendors', function () { return { paid: 0, pay_status: 'Not Paid', status: 'Quoted', due_on: null }; }, function (r) { return r.status === 'Cancelled'; });
       copy('ed_event_contacts');
@@ -307,7 +307,7 @@ function demoSeed() {
   function ev(title, start, len, extra) { return add('ed_events', Object.assign({ org_id: O, slug: slugFor(title), title: title, starts_on: start, ends_on: addDays(start, len), time_label: '', place: '', address: '', about: '', contact_line: '', giving_link: '', budget: 0, notes: '', sections: [], is_open: true }, extra)); }
   var revStart = addDays(today, 18);
   var rev = ev('Annual Tent Revival', revStart, 3, { time_label: 'Nightly at 7 PM', place: 'Miller Field', address: '1200 Waterman Rd, Waterman, IL', about: 'Four nights of worship, preaching and prayer under the big tent. Everyone is welcome. Bring a lawn chair if you like; seating is provided.', contact_line: 'Questions? Text Steve at (555) 555-0142.', giving_link: 'https://example.com/give', budget: 9000,
-    sections: ['calendar', 'people', 'speakers', 'worship', 'volunteers', 'guests', 'vendors', 'equipment', 'food', 'tasks', 'money', 'followup', 'prayer', 'v2'], volunteer_goal: 80,
+    sections: ['calendar', 'people', 'agenda', 'speakers', 'worship', 'volunteers', 'guests', 'vendors', 'equipment', 'food', 'tasks', 'money', 'followup', 'prayer', 'v2'], volunteer_goal: 80,
     theme: 'Let His Presence Fall', purpose: 'The purpose of this revival is to give God glory. We want to see the lost saved, the sick healed, and our town know that Jesus is alive.' });
   var R = rev.id, nights = [0, 1, 2, 3].map(function (i) { return addDays(revStart, i); });
   // calendar
@@ -320,6 +320,11 @@ function demoSeed() {
     add('ed_schedule', { event_id: R, on_date: d, start_time: '19:00', end_time: '21:00', title: i === 3 ? 'Closing Night And Baptisms' : 'Service', location: 'Main Tent', owner: '', notes: '' });
   });
   add('ed_schedule', { event_id: R, on_date: addDays(revStart, 4), start_time: '08:00', end_time: '13:00', title: 'Teardown', location: 'Miller Field', owner: 'Marcus Reed', notes: 'Lunch provided' });
+  // agenda: one for each night (nights 3 and 4 are left empty so the "copy a day" option shows)
+  [['Evangelist David Moore', 'Salvation And The Altar'], ['Pastor Angela Brooks', 'Healing Night']].forEach(function (sp, n) {
+    [['Opening Prayer', 'Pastor Solomon', 5, '19:00'], ['Worship', 'Jordan Mills', 30, '19:05'], ['Welcome And Offering', 'Steve Moss', 10, '19:35'], ['The Message: ' + sp[1], sp[0], 45, '19:45'], ['Altar Call And Prayer', 'Pam Hughes', 25, '20:30'], ['Closing And Announcements', 'Pastor Solomon', 5, '20:55']]
+      .forEach(function (a, i) { add('ed_agenda', { event_id: R, on_date: nights[n], title: a[0], leader: a[1], leader_ref: P[a[1]] ? 'ed_people:' + P[a[1]].id : '', start_time: a[3], minutes: a[2], done: false, notes: '', sort: i }); });
+  });
   // people
   function assign(name, team, role, extra) { return add('ed_event_people', Object.assign({ event_id: R, person_id: P[name].id, team: team, role: role, days: '', details: {}, amount: 0, pay_status: 'Not Paid', payer: '', due_on: null, notes: '' }, extra || {})); }
   assign('Steve Moss', 'leader', 'Event Director'); assign('Pastor Solomon', 'leader', 'Host'); assign('Marcus Reed', 'leader', 'Setup Lead'); assign('Dale Price', 'leader', 'Equipment');

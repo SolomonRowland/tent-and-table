@@ -1,4 +1,4 @@
--- Tent & Table database (version 20).
+-- Tent & Table database (version 21).
 -- Paste this whole file into Supabase: SQL Editor -> New query -> Run.
 -- It is safe to run more than once, and running it again never deletes data.
 -- Every table and function starts with "ed_".
@@ -424,7 +424,10 @@ create table if not exists public.ed_cards (
 );
 create index if not exists ed_cards_event_idx on public.ed_cards (event_id);
 
--- Upgrades from versions 12 to 20 (they come after every table above exists).
+-- Upgrades from versions 12 to 21 (they come after every table above exists).
+-- version 21: each agenda segment belongs to one day of the event, so a multi-day event has an agenda for each day
+alter table public.ed_agenda add column if not exists on_date date;
+
 -- version 20: table access stated outright and helper functions closed off (both at the end); no new tables or columns
 -- version 19: a private calendar link for each login (table ed_cal, at the end)
 -- version 18: details that depend on the contact type (speaker bio and travel, volunteer shirt size, guest church home...)
@@ -625,7 +628,7 @@ begin
   update public.ed_schedule set on_date = on_date + delta where event_id = p_event;
   update public.ed_items set on_date = on_date + delta where event_id = p_event and on_date is not null;
   update public.ed_tasks set done = false, due_on = due_on + delta where event_id = p_event;
-  update public.ed_agenda set done = false where event_id = p_event;
+  update public.ed_agenda set done = false, on_date = on_date + delta where event_id = p_event;
   update public.ed_event_equipment set loaded = false, returned = false where event_id = p_event;
   update public.ed_event_vendors set paid = 0, pay_status = 'Not Paid', status = case when status = 'Cancelled' then status else 'Quoted' end,
     due_on = due_on + delta where event_id = p_event;
@@ -666,8 +669,8 @@ begin
     select nid, kind, title, on_date + delta, time_label, start_time, end_time, needed, needs_check, notes, sort from public.ed_items where event_id = p_event;
   insert into public.ed_tasks (event_id, phase, area, title, due_on, due_time, owner, task_owner, assignee_refs, needed, notes, sort)
     select nid, phase, area, title, due_on + delta, due_time, owner, task_owner, assignee_refs, needed, notes, sort from public.ed_tasks where event_id = p_event;
-  insert into public.ed_agenda (event_id, title, leader, leader_ref, start_time, minutes, notes, sort)
-    select nid, title, leader, leader_ref, start_time, minutes, '', sort from public.ed_agenda where event_id = p_event;
+  insert into public.ed_agenda (event_id, on_date, title, leader, leader_ref, start_time, minutes, notes, sort)
+    select nid, on_date + delta, title, leader, leader_ref, start_time, minutes, '', sort from public.ed_agenda where event_id = p_event;
   -- scripture and declarations carry over; prayer needs are for this event only
   insert into public.ed_prayer (event_id, kind, title, body, sort)
     select nid, kind, title, body, sort from public.ed_prayer where event_id = p_event and kind <> 'intercede';

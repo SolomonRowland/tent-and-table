@@ -495,6 +495,15 @@ button.row:hover{background:#fff;box-shadow:0 0 0 1.5px var(--red-line),var(--sh
 .top .areabar button[aria-selected="true"]{background:#fff;color:var(--red);font-weight:700;box-shadow:0 1px 3px rgba(80,0,0,.2)}
 @media(max-width:400px){.top .areabar button{font-size:12px}}
 .subtabs.mini{max-width:320px;margin-bottom:12px}
+.daytabs{display:flex;gap:8px;overflow-x:auto;margin:0 0 14px;padding:2px 2px 6px;scrollbar-width:none;scroll-snap-type:x proximity}
+.daytabs::-webkit-scrollbar{display:none}
+.daytabs button{flex:0 0 auto;min-width:92px;padding:8px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;text-align:left;line-height:1.25;scroll-snap-align:start}
+.daytabs b{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--ink)}
+.daytabs b i{font-style:normal;font-size:11px;font-weight:700;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--soft);color:var(--muted);display:inline-flex;align-items:center;justify-content:center}
+.daytabs span{display:block;font-size:12px;color:var(--muted);white-space:nowrap}
+.daytabs button[aria-selected="true"]{background:var(--red);border-color:var(--red)}
+.daytabs button[aria-selected="true"] b,.daytabs button[aria-selected="true"] span{color:#fff}
+.daytabs button[aria-selected="true"] b i{background:rgba(255,255,255,.25);color:#fff}
 .stats.glance .stat{text-align:left}
 .stats.glance .stat:hover{box-shadow:0 0 0 1.5px var(--red-line),var(--shadow)}
 
@@ -1025,6 +1034,8 @@ button.act{border:0;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
   body.desk .list.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
   body.desk .stats{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
   body.desk .blk.lead > .card,body.desk .blk.lead > .countdown{max-width:none}
+body.desk .blk.lead:has(> .daytabs:last-child){margin-bottom:0}
+body.desk .blk.lead > .daytabs:last-child{margin-bottom:0}
   /* forms open as a panel on the right instead of rising from the bottom */
   body.desk .scrim{justify-content:flex-end;align-items:stretch;padding:0}
   body.desk .sheet{max-width:600px;width:600px;max-height:none;height:100vh;height:100dvh;border-radius:0;padding:0 28px 22px;animation:panelIn .24s cubic-bezier(.2,.8,.2,1);box-shadow:-18px 0 40px -20px rgba(17,20,24,.35)}
